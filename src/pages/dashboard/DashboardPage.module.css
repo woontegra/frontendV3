@@ -1,0 +1,465 @@
+.page {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.loading {
+  display: flex;
+  min-height: 60vh;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+  .statGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.cardHeader {
+  padding: 0.85rem 1rem 0.35rem;
+}
+
+.cardTitle {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.cardDescription {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.cardContent {
+  padding: 0.85rem 1rem 1rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.statCard {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem;
+}
+
+.statIcon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.55rem;
+  flex-shrink: 0;
+}
+
+.statIconBlue {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.statIconViolet {
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+
+.statIconGreen {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.statIconOrange {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.statLabel {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.statValue {
+  color: var(--text-strong);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .metricGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.metricBox {
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--surface-muted);
+}
+
+.metricBoxWarn {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.metricLabel {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.metricValue {
+  margin-top: 0.15rem;
+  color: var(--text-strong);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.metricValueWarn {
+  color: #b45309;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.badgeDanger {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.planBadge {
+  display: inline-flex;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text);
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.planBadgeTrial {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.planBadgeAnnual {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.planBadgeMonthly {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.dateGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--surface-muted);
+}
+
+@media (min-width: 640px) {
+  .dateGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.miniStats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .miniStats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.miniStat {
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--surface-muted);
+  text-align: center;
+}
+
+.textGreen {
+  color: #16a34a;
+}
+
+.textAmber {
+  color: #d97706;
+}
+
+.textRed {
+  color: #dc2626;
+}
+
+.textIndigo {
+  color: #4f46e5;
+}
+
+.progressTrack {
+  height: 0.75rem;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.progressGreen {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #22c55e, #059669);
+}
+
+.progressAmber {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f59e0b, #ea580c);
+}
+
+.progressRed {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ef4444, #e11d48);
+}
+
+.chartGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+  .chartGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.periodSelect {
+  height: 1.75rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.68rem;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+
+.table thead {
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.table th,
+.table td {
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+}
+
+.table th {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.table tbody tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.table tbody tr:hover {
+  background: var(--surface-muted);
+}
+
+.detailButton {
+  padding: 0.28rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.empty {
+  padding: 2.5rem 1rem;
+  color: #a1a1aa;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+@media (min-width: 640px) {
+  .modalOverlay {
+    align-items: center;
+  }
+}
+
+.modal {
+  width: min(100%, 28rem);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 1rem 1rem 0 0;
+  background: var(--surface);
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.18);
+}
+
+@media (min-width: 640px) {
+  .modal {
+    border-radius: 1rem;
+    max-height: 70vh;
+  }
+}
+
+.modalHeader,
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.modalFooter {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+}
+
+.modalBody {
+  overflow: auto;
+  padding: 1rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.modalSection {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--surface-muted);
+}
+
+.modalSectionBlue {
+  background: var(--info-panel);
+  border-color: #bfdbfe;
+}
+
+.modalSectionGreen {
+  background: var(--success-panel);
+  border-color: #bbf7d0;
+}
+
+.modalSection .dateGrid {
+  margin-top: 0.65rem;
+  background: var(--surface);
+}
+
+html.dark .modalSectionBlue {
+  border-color: rgba(37, 99, 235, 0.35);
+}
+
+html.dark .modalSectionGreen {
+  border-color: rgba(34, 197, 94, 0.32);
+}
+
+.closeButton {
+  padding: 0.45rem 0.9rem;
+  border: none;
+  border-radius: 0.45rem;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.hiddenSm {
+  display: none;
+}
+
+.hiddenMd {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .hiddenSm {
+    display: table-cell;
+  }
+}
+
+@media (min-width: 768px) {
+  .hiddenMd {
+    display: table-cell;
+  }
+}

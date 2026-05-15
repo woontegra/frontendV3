@@ -1,0 +1,150 @@
+.bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  box-sizing: border-box;
+  height: var(--app-calc-footer-height, 5.75rem);
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+/* Yan menü ile aynı üst çizgi (AppShell sidebarFooter); alt çubuk yalnızca ana kolonda — üst üste iki border olmaz */
+@media (min-width: 901px) {
+  .bar {
+    left: var(--app-shell-sidebar-width, 15rem);
+  }
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 15rem;
+  justify-content: center;
+  gap: 0.2rem;
+  min-height: 0;
+  align-self: stretch;
+  padding: 0.65rem 1rem;
+  border-right: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.meta strong {
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.actions {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  align-self: stretch;
+  justify-content: flex-end;
+  gap: 1rem;
+  min-width: 0;
+  padding: 0.65rem 50px 0.65rem 1rem;
+}
+
+.actionButton {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  min-width: 5rem;
+  padding: 0.45rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  font-size: 0.625rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.actionButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.actionButton svg,
+.icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.previewButton {
+  color: #7c3aed;
+  border-color: #ddd6fe;
+}
+
+.previewButton:hover {
+  background: #f5f3ff;
+}
+
+.newButton {
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+
+.newButton:hover {
+  background: #eff6ff;
+}
+
+.saveButton {
+  color: #16a34a;
+  border-color: #bbf7d0;
+}
+
+.saveButton:hover {
+  background: #f0fdf4;
+}
+
+html.dark .previewButton {
+  border-color: #5b21b6;
+}
+
+html.dark .previewButton:hover {
+  background: rgba(91, 33, 182, 0.2);
+}
+
+html.dark .newButton {
+  border-color: #1d4ed8;
+}
+
+html.dark .newButton:hover {
+  background: rgba(29, 78, 216, 0.2);
+}
+
+html.dark .saveButton {
+  border-color: #166534;
+}
+
+html.dark .saveButton:hover {
+  background: rgba(22, 101, 52, 0.2);
+}
+
+@media (max-width: 900px) {
+  .meta {
+    display: none;
+  }
+
+  .actions {
+    justify-content: center;
+    gap: 0.75rem;
+    padding-inline: 1rem;
+  }
+
+  .actionButton {
+    min-width: 4.5rem;
+    padding-inline: 0.85rem;
+  }
+}

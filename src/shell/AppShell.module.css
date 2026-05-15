@@ -1,0 +1,259 @@
+.shell {
+  min-height: 100vh;
+  background: var(--page);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  min-height: 100vh;
+  padding-top: 4rem;
+  transition: grid-template-columns 0.2s ease;
+}
+
+.bodyCollapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.sidebar {
+  position: sticky;
+  top: 4rem;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 4rem);
+  padding: 1rem 0.85rem 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  align-content: flex-start;
+  gap: 0.45rem;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 0.75rem;
+}
+
+.navIcon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  flex: 0 0 auto;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.5rem;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.navLinkWithTrail {
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.navLinkStart {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.navLinkLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navLabelWithBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.navLinkLabelTruncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navNewBadge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.12rem 0.35rem;
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(90deg, #d946ef, #ec4899, #f43f5e);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.navChevron {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  opacity: 0.55;
+  color: var(--muted);
+}
+
+.navLink:hover .navChevron {
+  opacity: 0.85;
+}
+
+.navLinkActive .navChevron {
+  opacity: 0.95;
+  color: #4338ca;
+}
+
+.adminGroup,
+.toolsGroup,
+.calculationGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+}
+
+.sectionLabel {
+  margin: 0;
+  padding: 0 0.55rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.adminLink {
+  color: var(--text);
+}
+
+.adminLinkActive {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.sidebarFooter {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  justify-content: center;
+  gap: 0.2rem;
+  box-sizing: border-box;
+  margin-top: auto;
+  height: var(--app-calc-footer-height, 5.75rem);
+  min-height: var(--app-calc-footer-height, 5.75rem);
+  padding: 0.65rem 0.85rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.sidebarFooter strong {
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.navLink:hover {
+  background: var(--hover);
+}
+
+.navLinkActive {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.upcomingGroup {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.upcomingLabel {
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.upcomingItem {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  flex: 0 0 auto;
+  padding: 0.35rem 0.55rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: not-allowed;
+}
+
+.upcomingItemWithTrail {
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.main {
+  min-width: 0;
+  min-height: calc(100vh - 4rem);
+  padding: 0.75rem 50px 1.5rem;
+  background: var(--page);
+}
+
+@media (max-width: 900px) {
+  .body,
+  .bodyCollapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar,
+  .sidebarCollapsed {
+    display: none;
+  }
+
+  .main {
+    padding-inline: 1rem;
+  }
+}
+
+:global(html.dark) .navLinkActive {
+  background: rgba(79, 70, 229, 0.22);
+  color: #c7d2fe;
+}
+
+:global(html.dark) .navLinkActive .navChevron {
+  color: #c7d2fe;
+  opacity: 0.9;
+}
+
+.upcomingItem .navChevron {
+  opacity: 0.45;
+}
+
+:global(html.dark) .adminLinkActive {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fcd34d;
+}

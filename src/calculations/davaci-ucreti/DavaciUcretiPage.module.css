@@ -1,0 +1,409 @@
+.workspace {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+  padding-bottom: var(--app-calc-footer-height, 5.75rem);
+  background: var(--page);
+}
+
+.accent {
+  height: 2px;
+  width: 100%;
+  background: #6a1b9a;
+  flex-shrink: 0;
+}
+
+.inner {
+  flex: 1;
+  width: 100%;
+  padding: 0.75rem 50px 1.5rem;
+}
+
+.pageHeader {
+  margin-bottom: 0.75rem;
+}
+
+.pageHeader h1 {
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--text-strong);
+}
+
+.recordName {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.card {
+  width: 100%;
+  display: grid;
+  gap: 1rem;
+  padding: 0.9rem 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.section {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.section h2 {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.basicGrid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.basicGridWithPeriod {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.basicGridWithoutPeriod {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ciplakFieldWithPeriod {
+  grid-column: span 2;
+}
+
+.field {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--text);
+}
+
+.field input,
+.field select,
+.extraNameInput,
+.extraValueInput,
+.modalCard input,
+.netInputRow input {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.inputError {
+  border-color: #f87171;
+}
+
+.errorText {
+  color: #dc2626;
+  font-size: 0.75rem;
+}
+
+.inlineActions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.inlineActions button,
+.extraRow button,
+.addRowButton,
+.netInputRow button,
+.modalActions button {
+  padding: 0.38rem 0.62rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.inlineActions button:hover,
+.extraRow button:hover,
+.addRowButton:hover,
+.netInputRow button:hover,
+.modalActions button:hover {
+  background: var(--hover);
+}
+
+.extraList {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.extraRow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.extraNameInput {
+  width: 7rem;
+  flex-shrink: 0;
+}
+
+.extraValueInput {
+  flex: 1;
+  min-width: 8rem;
+}
+
+.eklentiButton {
+  flex-shrink: 0;
+  color: #2563eb;
+}
+
+.dangerButton {
+  flex-shrink: 0;
+  min-width: 1.75rem;
+  padding-inline: 0.45rem;
+  color: #b91c1c;
+}
+
+.addRowButton {
+  width: fit-content;
+  border-style: dashed;
+  color: #2563eb;
+}
+
+.totalBox {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--hint-border);
+  border-radius: 0.55rem;
+  background: var(--hint-box);
+  color: var(--text);
+}
+
+.totalBox strong {
+  font-weight: 400;
+  color: #4f46e5;
+  font-size: 0.95rem;
+}
+
+.splitPanels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.panelHead {
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-head);
+}
+
+.panelHead h3 {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.panelBody {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.65rem;
+}
+
+.line {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.deduction {
+  color: #b91c1c;
+}
+
+.exemption {
+  color: #15803d;
+}
+
+.netLine {
+  border-bottom: none;
+  padding-top: 0.35rem;
+  color: var(--text-strong);
+  font-weight: 400;
+}
+
+.netInputRow {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.netInputRow button {
+  flex-shrink: 0;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.noteBox {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  background: var(--panel);
+}
+
+.noteInfo {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.savedNote {
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.modalCard {
+  width: min(100%, 24rem);
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.emptyText {
+  color: var(--muted);
+  text-align: center;
+}
+
+.hiddenReport {
+  display: none;
+}
+
+.reportContent {
+  max-width: 16cm;
+  padding: 0 12px;
+  color: #111827;
+  font-family: Inter, Arial, sans-serif;
+}
+
+.reportSection {
+  margin-bottom: 0.85rem;
+}
+
+.reportSection h2 {
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.reportContent table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.25rem;
+  font-size: 0.625rem;
+}
+
+.reportContent td,
+.reportContent th {
+  border: 1px solid #999;
+  padding: 5px 8px;
+}
+
+.setList {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.setRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+}
+
+html.dark .totalBox strong {
+  color: #a5b4fc;
+}
+
+html.dark .eklentiButton,
+html.dark .addRowButton {
+  color: #93c5fd;
+}
+
+@media (min-width: 640px) {
+  .basicGridWithPeriod {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ciplakFieldWithPeriod {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .splitPanels {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .inner {
+    padding-inline: 1rem;
+  }
+
+  .extraNameInput,
+  .extraValueInput {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+}

@@ -1,0 +1,18 @@
+.page {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem 0;
+}
+
+.page h1 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.page p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}

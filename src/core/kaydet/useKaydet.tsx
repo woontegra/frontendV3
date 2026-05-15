@@ -1,0 +1,165 @@
+/**
+ * Merkezi Kayıt Hook'u
+ * Tüm sayfalar bu hook'u kullanarak kayıt işlemi yapacak
+ */
+
+import { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { useToast } from "@/context/ToastContext";
+import { kaydetHesap, yukleHesap, type HesapTuru, type KayitSonucu } from "./kaydetServisi";
+import KaydetModal from "./kaydetModal";
+
+interface KaydetOptions {
+  hesapTuru: HesapTuru;
+  veri: any;
+  mevcutId?: string | number | null;
+  mevcutKayitAdi?: string | null; // Mevcut kaydın ismi (güncelleme için)
+  varsayilanIsim?: string; // Yeni kayıt için varsayılan isim (opsiyonel)
+  redirectPath?: string; // Kayıt sonrası yönlendirme yolu (opsiyonel)
+  onSuccess?: (result: KayitSonucu) => void; // Başarılı kayıt sonrası callback
+  onError?: (error: Error) => void; // Hata durumunda callback
+}
+
+export function useKaydet() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [currentOptions, setCurrentOptions] = useState<KaydetOptions | null>(null);
+  const navigate = useNavigate();
+  const { success, error: showError } = useToast();
+
+  /**
+   * Gerçek kayıt işlemini yapar (hem modal'dan hem direkt çağrılabilir)
+   */
+  const performKaydetInternal = useCallback(
+    async (kayitAdi: string, options: KaydetOptions) => {
+      setIsSaving(true);
+      try {
+        const result = await kaydetHesap(
+          kayitAdi,
+          options.hesapTuru,
+          options.veri,
+          options.mevcutId
+        );
+
+        setIsModalOpen(false);
+        success(result.message || "Kayıt başarıyla kaydedildi");
+
+        // Callback varsa çağır
+        if (options.onSuccess) {
+          options.onSuccess(result);
+        }
+
+        // Redirect varsa yap
+        if (options.redirectPath && result.id) {
+          const redirectUrl = options.redirectPath.includes(":id")
+            ? options.redirectPath.replace(":id", String(result.id))
+            : `${options.redirectPath}/${result.id}`;
+          
+          console.log('[useKaydet] Redirecting to:', redirectUrl);
+          
+          // replace: false kullan ki component kesin yeniden mount olsun
+          setTimeout(() => {
+            console.log('[useKaydet] Navigating now');
+            navigate(redirectUrl, { replace: false });
+          }, 300);
+        }
+      } catch (err: any) {
+        console.error("Kayıt hatası:", err);
+        const errorMessage = err.message || "Kayıt sırasında bir hata oluştu";
+        showError(errorMessage);
+
+        // Error callback varsa çağır
+        if (options.onError) {
+          options.onError(err);
+        }
+      } finally {
+        setIsSaving(false);
+        setCurrentOptions(null);
+      }
+    },
+    [navigate, success, showError]
+  );
+
+  /**
+   * Kayıt modal'ını açar veya direkt kayıt yapar
+   * @param options - Kayıt seçenekleri (hesapTuru/veri veya type/data/name/id uyumluluğu)
+   */
+  const kaydetAc = useCallback(async (options: KaydetOptions & { type?: string; data?: any; name?: string; id?: string }) => {
+    // Eski format (type, data, name, id) → yeni format (hesapTuru, veri, mevcutKayitAdi, mevcutId)
+    const normalized: KaydetOptions = {
+      hesapTuru: options.hesapTuru || options.type || "",
+      veri: options.veri ?? options.data ?? {},
+      mevcutId: options.mevcutId ?? options.id ?? undefined,
+      mevcutKayitAdi: options.mevcutKayitAdi ?? options.name ?? undefined,
+      redirectPath: options.redirectPath,
+      onSuccess: options.onSuccess,
+      onError: options.onError,
+    };
+    if (!normalized.hesapTuru || !normalized.veri) return;
+    // Mevcut kayıt varsa (mevcutId) → güncelleme yap (isim varsa direkt, yoksa API'den al)
+    if (normalized.mevcutId) {
+      let kayitAdi = normalized.mevcutKayitAdi;
+      if (!kayitAdi) {
+        // İsim yoksa API'den mevcut kaydı al (sayfa load etmemiş olabilir)
+        try {
+          // Burada amaç sadece mevcut kayıt adını almak; tür doğrulaması bu adımda gerekli değil.
+          const loaded = await yukleHesap(normalized.mevcutId);
+          kayitAdi = loaded.success && loaded.name ? loaded.name : "Mevcut Kayıt";
+        } catch {
+          kayitAdi = "Mevcut Kayıt";
+        }
+      }
+      performKaydetInternal(kayitAdi, normalized);
+      return;
+    }
+    // Yeni kayıt → modal aç
+    setCurrentOptions(normalized);
+    setIsModalOpen(true);
+  }, [performKaydetInternal]);
+
+  /**
+   * Modal'ı kapatır
+   */
+  const kaydetKapat = useCallback(() => {
+    setIsModalOpen(false);
+    setCurrentOptions(null);
+  }, []);
+
+  /**
+   * Modal'dan çağrılan kayıt işlemi
+   */
+  const performKaydet = useCallback(
+    async (kayitAdi: string) => {
+      if (!currentOptions) return;
+      await performKaydetInternal(kayitAdi, currentOptions);
+    },
+    [currentOptions, performKaydetInternal]
+  );
+
+  /**
+   * Modal component'ini render eder
+   */
+  const KaydetModalComponent = useCallback(() => {
+    if (!currentOptions) return null;
+
+    return (
+      <KaydetModal
+        open={isModalOpen}
+        onClose={kaydetKapat}
+        onSave={performKaydet}
+        hesapTuru={currentOptions.hesapTuru}
+        defaultName={currentOptions.mevcutKayitAdi || currentOptions.varsayilanIsim || undefined} // Mevcut kayıt adı veya varsayılan isim
+        isLoading={isSaving}
+      />
+    );
+  }, [isModalOpen, isSaving, currentOptions, kaydetKapat, performKaydet]);
+
+  return {
+    kaydetAc,
+    kaydetKapat,
+    isModalOpen,
+    isSaving,
+    KaydetModal: KaydetModalComponent,
+  };
+}
+

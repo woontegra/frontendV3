@@ -1,0 +1,101 @@
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Özgüllük: .toolbar button ile çakışmasın; merkezi ExportButtons ile aynı renk dili */
+.toolbar .copyButton,
+.toolbar .printButton,
+.toolbar .pdfButton,
+.toolbar .closeButton {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-width: 1px;
+  border-style: solid;
+  background: var(--surface);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.toolbar .copyButton {
+  border-color: #10b981;
+  color: #047857;
+}
+
+.toolbar .copyButton:hover {
+  background: #ecfdf5;
+}
+
+.toolbar .printButton {
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.toolbar .printButton:hover {
+  background: #eff6ff;
+}
+
+.toolbar .pdfButton {
+  border-color: #ef4444;
+  color: #b91c1c;
+}
+
+.toolbar .pdfButton:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.toolbar .closeButton {
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+.toolbar .closeButton:hover {
+  background: #f3f4f6;
+}
+
+.toolbar .pdfButton:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+html.dark .toolbar .copyButton {
+  border-color: #059669;
+  color: #6ee7b7;
+}
+
+html.dark .toolbar .copyButton:hover {
+  background: rgba(6, 78, 59, 0.35);
+}
+
+html.dark .toolbar .printButton {
+  border-color: #2563eb;
+  color: #93c5fd;
+}
+
+html.dark .toolbar .printButton:hover {
+  background: rgba(30, 58, 138, 0.35);
+}
+
+html.dark .toolbar .pdfButton {
+  border-color: #dc2626;
+  color: #fca5a5;
+}
+
+html.dark .toolbar .pdfButton:hover:not(:disabled) {
+  background: rgba(127, 29, 29, 0.35);
+}
+
+html.dark .toolbar .closeButton {
+  border-color: #6b7280;
+  color: #d1d5db;
+}
+
+html.dark .toolbar .closeButton:hover {
+  background: rgba(55, 65, 81, 0.5);
+}

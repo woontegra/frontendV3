@@ -1,0 +1,15 @@
+---
+description: Hesaplama sayfaları — tam genişlik yerleşimi (kidem dahil)
+globs: src/calculations/**/*
+alwaysApply: false
+---
+
+# Hesaplama sayfası yerleşimi (frontendV3)
+
+Hesaplama modüllerinde ana içerik **tam genişlik** kullanır: `main` alanını yatayda doldur, içerik için `w-full` ve yan padding (mobilde ~12px, `sm+` için davacı/standart ile uyumlu `px-[50px]` veya modüldeki eşdeğer).
+
+- **Standart fazla mesai** — `StandartFazlaMesaiPage.module.css` `.workspace` / `.inner`
+- **Davacı ücreti** — `DavaciUcretiPage.module.css` `.workspace` / `.inner`
+- **Kıdem tazminatı** (`src/calculations/kidem-tazminati/`) ve **İhbar tazminatı** (`src/calculations/ihbar-tazminati/`) — tüm alt sayfalar ve seçim ekranı: `max-w-* mx-auto` ile dar kolon **kullanma**; `w-full px-3 sm:px-[50px]`.
+
+Modal / küçük overlay (`max-w-sm`, `max-w-md`) sadece diyalog kutularında kalır.

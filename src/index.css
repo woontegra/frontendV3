@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --surface: #ffffff;
+  --surface-muted: #fafafa;
+  --page: #f8fafc;
+  --border: #e4e4e7;
+  --text: #3f3f46;
+  --text-strong: #27272a;
+  --muted: #71717a;
+  --hover: #f4f4f5;
+  --panel: rgba(250, 250, 250, 0.65);
+  --panel-head: #fafafa;
+  --hint-box: rgba(238, 242, 255, 0.55);
+  --hint-border: #c7d2fe;
+  --info-panel: #eff6ff;
+  --success-panel: #f0fdf4;
+  /* Sabit hesaplama alt çubuğu (PageActionBar) ile kenar çubuğu footer üst çizgisini aynı hizada tutar */
+  --app-calc-footer-height: 5.75rem;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-weight: 300;
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  background-color: var(--page);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--page);
+  color: var(--text);
+}
+
+html.dark {
+  color-scheme: dark;
+  --surface: #111827;
+  --surface-muted: #1f2937;
+  --page: #0f172a;
+  --border: #374151;
+  --text: #d1d5db;
+  --text-strong: #f3f4f6;
+  --muted: #9ca3af;
+  --hover: #1f2937;
+  --panel: rgba(31, 41, 55, 0.72);
+  --panel-head: #1f2937;
+  --hint-box: rgba(55, 48, 163, 0.22);
+  --hint-border: #4338ca;
+  --info-panel: rgba(29, 78, 216, 0.16);
+  --success-panel: rgba(22, 101, 52, 0.18);
+}
+
+#root {
+  min-height: 100vh;
+  background-color: var(--page);
+  color: var(--text);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.125rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+h2 {
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+
+p {
+  font-size: 0.8125rem;
+}
+
+label,
+input,
+textarea,
+select,
+button {
+  /* Form kontrolleri ve etiketler: ~1pt daha büyük */
+  font-size: calc(0.8125rem + 1pt);
+}
+
+button {
+  font-weight: 400;
+}
+
+input::placeholder {
+  color: var(--muted);
+}

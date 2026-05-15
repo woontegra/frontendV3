@@ -1,0 +1,28 @@
+.workspace {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+  padding-bottom: 4.75rem;
+  background: var(--page);
+  color: var(--text);
+}
+
+.accent {
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, #a855f7, #6366f1, #3b82f6);
+  flex-shrink: 0;
+}
+
+.inner {
+  flex: 1;
+  width: 100%;
+  padding: 0.75rem 50px 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .inner {
+    padding-inline: 1rem;
+  }
+}

@@ -1,0 +1,43 @@
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  overflow-x: auto;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.separator {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: #a1a1aa;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: inherit;
+}
+
+.link:hover {
+  color: #4f46e5;
+}
+
+.current {
+  color: var(--text-strong);
+  font-weight: 400;
+}
+
+.homeIcon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
