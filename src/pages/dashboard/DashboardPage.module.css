@@ -111,6 +111,13 @@
   font-weight: 600;
 }
 
+.statHint {
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.3;
+}
+
 .metricGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

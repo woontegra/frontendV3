@@ -10,6 +10,7 @@ import { getVideoLink } from "@/config/videoLinks";
 import { calcWorkPeriodBilirKisi, calculateWeeksBetweenDates, isoToTR } from "@/utils/dateUtils";
 import { apiPost } from "@/shared/utils/apiClient";
 import { buildWordTable, adaptToWordTable, copySectionForWord, clampToLastDayOfMonth, getAsgariUcretByDate } from "@modules/fazla-mesai/shared";
+import { MetinHesaplamasiAccordion } from "../shared/MetinHesaplamasiAccordion";
 import { expandYeraltiRowsForExclusions } from "./yeraltiAnnualLeaveUbgtExpand";
 import {
   exclusionsNeedLegacySplit,
@@ -1042,15 +1043,8 @@ export default function YeraltiIsciPage() {
               </div>
             </section>
 
-            <section className="rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm bg-white dark:bg-gray-800">
-              <details className="group" open>
-                <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between list-none">
-                  <span>Metin Hesaplaması</span>
-                  <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </summary>
-                <div className="p-4">
+            <MetinHesaplamasiAccordion>
+<div className="p-4">
                   <p className="text-xs text-red-600 dark:text-red-400 font-medium mb-3">
                     Özet metinler girilen saatlere göre hesaplanır (yeraltı usulü, 37:30 haftalık sınır, 6:15 hafta tatili referansı).
                   </p>
@@ -1106,8 +1100,7 @@ export default function YeraltiIsciPage() {
                     )}
                   </div>
                 </div>
-              </details>
-            </section>
+            </MetinHesaplamasiAccordion>
 
             <div className="space-y-3">
               <YillikIzinPanel exclusions={exclusions} setExclusions={setExclusions} success={success} showToastError={showToastError} />

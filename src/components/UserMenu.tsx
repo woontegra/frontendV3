@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type SyntheticEvent } from "react";
 import { Link } from "react-router-dom";
 import { 
   User, 
@@ -23,6 +23,7 @@ import UploadAvatarDialog from "@/components/profile/UploadAvatarDialog";
 import {
   getStoredAvatarBase64,
   isAdminRole,
+  isPlaceholderAvatarDimensions,
   resolveProfilePictureUrl,
   roleDisplayLabel,
 } from "@/shared/utils/profilePicture";
@@ -43,8 +44,10 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
       setAvatarUrl(null);
       return;
     }
-    setAvatarUrl(resolveProfilePictureUrl(user.id, user.profilePicture));
-  }, [user?.id, user?.profilePicture]);
+    setAvatarUrl(
+      resolveProfilePictureUrl(user.id, user.profilePicture, user.profilePictureUrl),
+    );
+  }, [user?.id, user?.profilePicture, user?.profilePictureUrl]);
 
   useEffect(() => {
     syncAvatar();
@@ -81,11 +84,18 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
 
   const handleAvatarError = () => {
     const base64 = getStoredAvatarBase64(user?.id);
-    if (base64) {
+    if (base64 && avatarUrl !== base64) {
       setAvatarUrl(base64);
       return;
     }
     setAvatarUrl(null);
+  };
+
+  const handleAvatarLoad = (event: SyntheticEvent<HTMLImageElement>) => {
+    const img = event.currentTarget;
+    if (isPlaceholderAvatarDimensions(img.naturalWidth, img.naturalHeight)) {
+      handleAvatarError();
+    }
   };
 
   const handleMouseEnter = () => {
@@ -114,13 +124,21 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
           >
             <Avatar className="h-8 w-8">
               {avatarUrl ? (
-                <AvatarImage
-                  src={avatarUrl}
-                  alt={displayName}
-                  onError={handleAvatarError}
-                />
+                <>
+                  <AvatarImage
+                    src={avatarUrl}
+                    alt={displayName}
+                    onLoad={handleAvatarLoad}
+                    onError={handleAvatarError}
+                  />
+                  <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-700 text-white text-xs font-semibold">
+                    {initials}
+                  </AvatarFallback>
+                </>
               ) : (
-                <AvatarFallback>{initials}</AvatarFallback>
+                <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-700 text-white text-xs font-semibold">
+                  {initials}
+                </AvatarFallback>
               )}
             </Avatar>
             <span className="hidden md:flex md:flex-col md:items-start md:leading-tight">
@@ -160,11 +178,17 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
               >
                 <Avatar className="h-12 w-12 border-2 border-white shadow-md ring-2 ring-gray-100 transition-all duration-200 group-hover:ring-blue-300 dark:group-hover:ring-blue-500 group-hover:scale-105">
                   {avatarUrl ? (
-                    <AvatarImage
-                      src={avatarUrl}
-                      alt={displayName}
-                      onError={handleAvatarError}
-                    />
+                    <>
+                      <AvatarImage
+                        src={avatarUrl}
+                        alt={displayName}
+                        onLoad={handleAvatarLoad}
+                        onError={handleAvatarError}
+                      />
+                      <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-700 text-white text-base font-semibold">
+                        {initials}
+                      </AvatarFallback>
+                    </>
                   ) : (
                     <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-700 text-white text-base font-semibold">
                       {initials}

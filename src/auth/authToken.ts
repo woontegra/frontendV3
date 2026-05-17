@@ -18,6 +18,7 @@ export type LoginResponse = {
     role?: string;
     tenantId?: number;
     profilePicture?: string;
+    profilePictureUrl?: string | null;
   };
   licenseType?: string | null;
   professionalLicenseValid?: boolean;

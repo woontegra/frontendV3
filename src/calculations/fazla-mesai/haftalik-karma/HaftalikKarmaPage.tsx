@@ -64,6 +64,7 @@ import { ZamanasimiModal } from "../standart/ZamanasimiModal";
 import { ZamanasimiCetvelBanner } from "../standart/ZamanasimiCetvelBanner";
 import { KatsayiModal } from "../standart/KatsayiModal";
 import { MahsuplasamaModal } from "../standart/MahsuplasamaModal";
+import { MetinHesaplamasiAccordion } from "../shared/MetinHesaplamasiAccordion";
 import { FazlaMesaiCetvelToolbar } from "../shared/FazlaMesaiCetvelToolbar";
 import { RECORD_TYPE, REDIRECT_BASE_PATH } from "./contract";
 import type { Mode270 } from "../standart/contract";
@@ -1330,15 +1331,8 @@ export default function HaftalikKarmaPage() {
             </section>
 
             {/* Metin Hesaplaması */}
-            <section className="rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm bg-white dark:bg-gray-800">
-              <details className="group" open>
-                <summary className="cursor-pointer select-none px-4 py-3 text-xs font-medium text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between list-none">
-                  <span>Metin Hesaplaması</span>
-                  <svg className="w-4 h-4 transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </summary>
-                <style>{`
+            <MetinHesaplamasiAccordion>
+<style>{`
                   details summary::-webkit-details-marker { display: none; }
                   details summary::marker { display: none; }
                 `}</style>
@@ -1357,8 +1351,7 @@ export default function HaftalikKarmaPage() {
                     </div>
                   )}
                 </div>
-              </details>
-            </section>
+            </MetinHesaplamasiAccordion>
 
             <div className="space-y-3">
               <div className="rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden bg-white dark:bg-gray-800 px-4 py-3 shadow-sm">

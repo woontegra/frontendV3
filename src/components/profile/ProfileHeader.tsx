@@ -2,9 +2,13 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { API_BASE_URL } from "@/utils/apiClient";
 import UploadAvatarDialog from "./UploadAvatarDialog";
 import { Camera } from "lucide-react";
+import {
+  isPlaceholderAvatarDimensions,
+  resolveProfilePictureUrl,
+} from "@/shared/utils/profilePicture";
+import type { SyntheticEvent } from "react";
 
 function formatSubscriptionDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "-";
@@ -44,23 +48,21 @@ export default function ProfileHeader() {
       setAvatarUrl(null);
       return;
     }
-    try {
-      const base64Avatar = localStorage.getItem(`avatar_base64_${user.id}`);
-      if (base64Avatar && base64Avatar.startsWith("data:image/")) {
-        setAvatarUrl(base64Avatar);
-        return;
-      }
-    } catch {
-      // ignore
+    setAvatarUrl(
+      resolveProfilePictureUrl(user.id, user.profilePicture, user.profilePictureUrl),
+    );
+  }, [user?.id, user?.profilePicture, user?.profilePictureUrl]);
+
+  const handleAvatarError = () => {
+    setAvatarUrl(null);
+  };
+
+  const handleAvatarLoad = (event: SyntheticEvent<HTMLImageElement>) => {
+    const img = event.currentTarget;
+    if (isPlaceholderAvatarDimensions(img.naturalWidth, img.naturalHeight)) {
+      handleAvatarError();
     }
-    if (user?.profilePicture) {
-      let profilePath = user.profilePicture;
-      if (!profilePath.startsWith("/")) profilePath = "/" + profilePath;
-      setAvatarUrl(`${API_BASE_URL}${profilePath}`);
-    } else {
-      setAvatarUrl(null);
-    }
-  }, [user?.id, user?.profilePicture]);
+  };
 
   useEffect(() => {
     if (!user?.email) {
@@ -112,7 +114,17 @@ export default function ProfileHeader() {
                 onClick={() => setIsDialogOpen(true)}
               >
                 {avatarUrl ? (
-                  <AvatarImage src={avatarUrl} alt={displayName} />
+                  <>
+                    <AvatarImage
+                      src={avatarUrl}
+                      alt={displayName}
+                      onLoad={handleAvatarLoad}
+                      onError={handleAvatarError}
+                    />
+                    <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-700 text-white text-xl font-semibold">
+                      {initials}
+                    </AvatarFallback>
+                  </>
                 ) : (
                   <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-700 text-white text-xl font-semibold">
                     {initials}

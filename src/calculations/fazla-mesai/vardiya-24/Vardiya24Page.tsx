@@ -50,6 +50,7 @@ import {
 } from "@/shared/utils/fazlaMesai/fmManualWageRowOverrides";
 import { ManualBrutWageApplyControls } from "@/features/manual-brut-wage/ManualBrutWageApplyControls";
 import styles from "../standart/StandartFazlaMesaiPage.module.css";
+import { MetinHesaplamasiAccordion } from "../shared/MetinHesaplamasiAccordion";
 
 const RECORD_TYPE = "fazla_mesai_vardiya_24";
 const PAGE_TITLE = "24 Saat Çalışma Hesaplama";
@@ -1309,19 +1310,12 @@ export default function Vardiya24Page() {
               </div>
             </section>
 
-            <section className="rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm bg-white dark:bg-gray-800">
-              <details open className="group">
-                <summary className="cursor-pointer px-4 py-3 text-sm font-medium bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 list-none">
-                  Metin Hesaplaması
-                </summary>
-                <div className="p-4">
-                  {isCalculating && <p className="text-xs text-gray-500 mb-2">Hesaplanıyor…</p>}
-                  <pre className="text-xs whitespace-pre-wrap font-mono bg-gray-100 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-600 rounded-lg p-3 text-gray-800 dark:text-gray-200">
-                    {bilirkisiDefaultText}
-                  </pre>
-                </div>
-              </details>
-            </section>
+            <MetinHesaplamasiAccordion>
+              {isCalculating && <p className="text-xs text-gray-500 mb-2">Hesaplanıyor…</p>}
+              <pre className="text-xs whitespace-pre-wrap font-mono bg-gray-100 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-600 rounded-lg p-3 text-gray-800 dark:text-gray-200">
+                {bilirkisiDefaultText}
+              </pre>
+            </MetinHesaplamasiAccordion>
 
             <div className="space-y-3">
               <YillikIzinPanel exclusions={exclusions} setExclusions={setExclusions} success={success} showToastError={showToastError} />

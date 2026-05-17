@@ -126,6 +126,7 @@ export default function UploadAvatarDialog({
           const updatedUser = {
             ...user,
             profilePicture: profilePicturePath,
+            profilePictureUrl: fullAvatarUrl,
           };
           setUser(updatedUser);
           // localStorage'ı da hemen güncelle

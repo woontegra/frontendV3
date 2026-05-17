@@ -69,6 +69,7 @@ import {
 } from "@/utils/fazlaMesai/fmManualWageRowOverrides";
 import { ManualBrutWageApplyControls } from "@/features/manual-brut-wage/ManualBrutWageApplyControls";
 import { FazlaMesaiCetvelToolbar } from "../shared/FazlaMesaiCetvelToolbar";
+import { MetinHesaplamasiAccordion } from "../shared/MetinHesaplamasiAccordion";
 import type { Mode270 } from "../standart/contract";
 import styles from "../standart/StandartFazlaMesaiPage.module.css";
 import type { DonemselFazlaMesaiRuntimeConfig } from "./donemselPageConfig";
@@ -874,21 +875,8 @@ export function DonemselFazlaMesaiCore({ config }: { config: DonemselFazlaMesaiR
               />
             </section>
 
-            <section className="rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm bg-white dark:bg-gray-800">
-              <details className="group" open>
-                <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between list-none">
-                  <span>Metin Hesaplaması</span>
-                  <svg
-                    className="w-4 h-4 transition-transform group-open:rotate-180"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </summary>
-                <div className="p-4">
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+            <MetinHesaplamasiAccordion>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
                     Özet metinler yaz/kış desenine ve cetvelde kullanılan haftalık FM formülüne göredir; asgari ücret
                     dönemleri ve tanık kesişimleri cetvel satırlarında ayrıca uygulanır.
                   </p>
@@ -904,9 +892,7 @@ export function DonemselFazlaMesaiCore({ config }: { config: DonemselFazlaMesaiR
                       ))}
                     </div>
                   </div>
-                </div>
-              </details>
-            </section>
+            </MetinHesaplamasiAccordion>
 
             <section className="rounded-xl border border-gray-200 dark:border-gray-600 p-4 sm:p-5">
               <h2 className={sectionTitleCls}>Ek Ayarlar</h2>

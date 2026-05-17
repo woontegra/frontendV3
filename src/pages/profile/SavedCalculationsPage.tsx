@@ -9,6 +9,7 @@ import {
   CheckSquare, Square, Download, Upload,
 } from "lucide-react";
 import { apiClient } from "@/utils/apiClient";
+import { getCaseEndDate, getCaseStartDate } from "./savedCaseDates";
 
 type SavedCase = {
   id: number;
@@ -111,38 +112,12 @@ function mapItem(item: any, tenantId: number): SavedCase {
   }
   const inner = pd.data || pd;
 
-  // Mevsimlik dönem tarihleri
-  let mevsimStart: string | null = null;
-  let mevsimEnd: string | null = null;
-  if (pd.form?.periods && Array.isArray(pd.form.periods) && pd.form.periods.length > 0) {
-    const sorted = [...pd.form.periods].sort((a: any, b: any) =>
-      new Date(a.start || 0).getTime() - new Date(b.start || 0).getTime()
-    );
-    mevsimStart = sorted[0]?.start || null;
-    const sortedByEnd = [...pd.form.periods].sort((a: any, b: any) =>
-      new Date(b.end || 0).getTime() - new Date(a.end || 0).getTime()
-    );
-    mevsimEnd = sortedByEnd[0]?.end || null;
-  }
-
   return {
     id: item.id,
     hesaplama_tipi: (item.type || item.hesaplama_tipi || "").toLowerCase(),
     kayit_adi: item.name || item.kayit_adi || null,
-    ise_giris:
-      mevsimStart ||
-      pd.form?.iseGiris || pd.form?.startDate ||
-      inner.form?.iseGiris || inner.form?.startDate ||
-      pd.ise_giris || pd.start_date ||
-      inner.ise_giris || inner.start_date ||
-      item.ise_giris || null,
-    isten_cikis:
-      mevsimEnd ||
-      pd.form?.istenCikis || pd.form?.endDate ||
-      inner.form?.istenCikis || inner.form?.endDate ||
-      pd.isten_cikis || pd.end_date ||
-      inner.isten_cikis || inner.end_date ||
-      item.isten_cikis || null,
+    ise_giris: getCaseStartDate(item),
+    isten_cikis: getCaseEndDate(item),
     net_toplam:
       inner.results?.net ?? pd.results?.net ??
       pd.net_total ?? inner.net_total ??

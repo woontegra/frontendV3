@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Calendar,
@@ -13,10 +13,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
-  Legend as ReLegend,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip as ReTooltip,
   XAxis,
@@ -33,9 +29,8 @@ import {
 import {
   formatCalculationType,
   MONTHS,
-  normalizePieType,
-  PIE_COLORS,
 } from "./calculationTypeLabels";
+import CalculationTypeDistributionChart from "./CalculationTypeDistributionChart";
 import {
   loadDashboardData,
   readDashboardUserRole,
@@ -56,6 +51,13 @@ type RecentRow = {
   net: number;
   data: Record<string, unknown> | null;
 };
+
+function formatAvgSeconds(seconds: number): string {
+  if (seconds < 10) {
+    return `${seconds.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} sn`;
+  }
+  return `${Math.round(seconds).toLocaleString("tr-TR")} sn`;
+}
 
 function buildRecentRows(cases: SavedCase[]): RecentRow[] {
   return cases.slice(0, 10).map((c) => {
@@ -179,13 +181,15 @@ export default function DashboardPage() {
     return raw;
   }, [userInfo]);
 
-  const avgSpeed = useMemo(() => {
+  const avgProcessingTimeSec = useMemo(() => {
     const recent = savedCases.slice(0, 10);
     let total = 0;
     let count = 0;
     recent.forEach((c) => {
-      if (c.createdAt && c.updatedAt) {
-        const ms = new Date(c.updatedAt).getTime() - new Date(c.createdAt).getTime();
+      const created = c.createdAt || c.created_at;
+      const updated = c.updatedAt || c.updated_at;
+      if (created && updated) {
+        const ms = new Date(updated).getTime() - new Date(created).getTime();
         if (ms > 0 && ms < 300_000) {
           total += ms / 1000;
           count += 1;
@@ -193,13 +197,25 @@ export default function DashboardPage() {
       }
     });
     if (count === 0) {
-      return "Çok Hızlı ⚡";
+      return null;
     }
-    const avg = total / count;
-    if (avg < 60) {
-      return `${avg.toFixed(1)} sn`;
-    }
-    return `${Math.floor(avg / 60)}dk ${Math.floor(avg % 60)}sn`;
+    return total / count;
+  }, [savedCases]);
+
+  const monthlyCalculationCount = useMemo(() => {
+    const now = new Date();
+    return savedCases.filter((c) => {
+      const source = c.created_at || c.createdAt;
+      if (!source) {
+        return false;
+      }
+      try {
+        const d = new Date(source);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      } catch {
+        return false;
+      }
+    }).length;
   }, [savedCases]);
 
   const lastLogin = useMemo(() => {
@@ -254,15 +270,6 @@ export default function DashboardPage() {
   };
 
   const lastRecordName = savedCases[0]?.name ?? "-";
-
-  const pieData = useMemo(() => {
-    const map: Record<string, number> = {};
-    savedCases.forEach((c) => {
-      const key = normalizePieType(c.type || c.hesaplama_tipi || "Diğer");
-      map[key] = (map[key] || 0) + 1;
-    });
-    return Object.entries(map).map(([name, value]) => ({ name, value }));
-  }, [savedCases]);
 
   const barData = useMemo(() => {
     const now = new Date();
@@ -414,11 +421,21 @@ export default function DashboardPage() {
 
         <div className={`${styles.card} ${styles.statCard}`}>
           <div className={`${styles.statIcon} ${styles.statIconViolet}`}>
-            <Clock size={20} />
+            {avgProcessingTimeSec != null ? <Clock size={20} /> : <TrendingUp size={20} />}
           </div>
           <div>
-            <p className={styles.statLabel}>Ort. Hesaplama Süresi</p>
-            <p className={styles.statValue}>{avgSpeed}</p>
+            {avgProcessingTimeSec != null ? (
+              <>
+                <p className={styles.statLabel}>Ortalama İşlem Süresi</p>
+                <p className={styles.statValue}>{formatAvgSeconds(avgProcessingTimeSec)}</p>
+                <p className={styles.statHint}>Kayıtlı hesaplamalara göre</p>
+              </>
+            ) : (
+              <>
+                <p className={styles.statLabel}>Bu Ayki Hesaplama</p>
+                <p className={styles.statValue}>{num(monthlyCalculationCount)}</p>
+              </>
+            )}
           </div>
         </div>
 
@@ -437,7 +454,7 @@ export default function DashboardPage() {
             <Scale size={20} />
           </div>
           <div>
-            <p className={styles.statLabel}>Son Kayıt Adı</p>
+            <p className={styles.statLabel}>Son Kayıt</p>
             <p className={styles.statValue}>{lastRecordName}</p>
           </div>
         </div>
@@ -459,7 +476,7 @@ export default function DashboardPage() {
                 { label: "Aktif Abonelik", value: num(financial.activeSubscriptionCount) },
                 { label: "Yıllık Plan", value: num(financial.annualPlanCount) },
                 { label: "Aylık Plan", value: num(financial.monthlyPlanCount) },
-                { label: "Ort. Lisans Süresi", value: `${num(financial.averageLicenseDurationDays)} gün` },
+                { label: "Ortalama Lisans Süresi", value: `${num(financial.averageLicenseDurationDays)} gün` },
                 { label: "Demo Kullanıcı", value: num(financial.demoUserCount) },
                 { label: "Demo → Satış %", value: `%${financial.demoToSaleConversionRate.toFixed(1)}` },
                 { label: "Son 30 Gün Yeni", value: num(financial.newSubscriptionsLast30Days) },
@@ -552,10 +569,10 @@ export default function DashboardPage() {
             </div>
             <p className={styles.metricLabel}>
               {!sub.hasSubscription
-                ? "⚠️ Abonelik bilgisi bulunamadı"
+                ? "Abonelik bilgisi bulunamadı"
                 : sub.daysRemaining > 0
-                  ? `🎯 ${sub.daysUsed} gün tamamlandı • ${sub.daysRemaining} gün kaldı`
-                  : "❌ Aboneliğinizin süresi doldu"}
+                  ? `${sub.daysUsed} gün tamamlandı • ${sub.daysRemaining} gün kaldı`
+                  : "Aboneliğinizin süresi doldu"}
             </p>
           </div>
         </div>
@@ -567,30 +584,7 @@ export default function DashboardPage() {
             <h2 className={styles.cardTitle}>Hesaplama Türlerine Göre Dağılım</h2>
           </div>
           <div className={styles.cardContent}>
-            {pieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={85}
-                    label={({ name }) => name}
-                    labelLine
-                  >
-                    {pieData.map((_, index) => (
-                      <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <ReTooltip />
-                  <ReLegend wrapperStyle={{ fontSize: "11px" }} iconSize={9} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className={styles.empty}>Henüz hesaplama kaydı yok</div>
-            )}
+            <CalculationTypeDistributionChart savedCases={savedCases} />
           </div>
         </div>
 

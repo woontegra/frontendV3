@@ -45,6 +45,7 @@ import {
   reduceRowOverridesWithManualBrut,
 } from "@/shared/utils/fazlaMesai/fmManualWageRowOverrides";
 import { ManualBrutWageApplyControls } from "@/features/manual-brut-wage/ManualBrutWageApplyControls";
+import { MetinHesaplamasiAccordion } from "../shared/MetinHesaplamasiAccordion";
 import { FazlaMesaiCetvelToolbar } from "../shared/FazlaMesaiCetvelToolbar";
 import styles from "../standart/StandartFazlaMesaiPage.module.css";
 
@@ -1285,21 +1286,8 @@ export default function GemiAdamiGunlukPage() {
               </div>
             )}
 
-            <section className="rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm bg-white dark:bg-gray-800">
-              <details className="group" open>
-                <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between list-none">
-                  <span>Metin Hesaplaması</span>
-                  <svg
-                    className="w-4 h-4 transition-transform group-open:rotate-180"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </summary>
-                <div className="p-4">
+            <MetinHesaplamasiAccordion>
+<div className="p-4">
                   {isCalculating && <p className="text-xs text-gray-500 mb-2">Hesaplanıyor…</p>}
                   <p className="text-xs text-red-600 dark:text-red-400 font-medium mb-3">
                     Aşağıdaki metin kartları yalnızca davacı ve tanık beyanlarına göre üretilir (Tanıklı Standart ile aynı yapı). Cetvel satırları sunucuda dönemsel olarak hesaplanır; haftalık yasal çalışma 48 saattir.
@@ -1326,8 +1314,7 @@ export default function GemiAdamiGunlukPage() {
                     )}
                   </div>
                 </div>
-              </details>
-            </section>
+            </MetinHesaplamasiAccordion>
 
             <div className="space-y-3">
               <YillikIzinPanel exclusions={exclusions} setExclusions={setExclusions} success={success} showToastError={showToastError} />

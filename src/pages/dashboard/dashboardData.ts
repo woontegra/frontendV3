@@ -11,6 +11,7 @@ export type SavedCase = {
   detay?: Record<string, unknown>;
   created_at?: string;
   createdAt?: string;
+  updated_at?: string;
   updatedAt?: string;
   brut_total?: number;
   net_total?: number;

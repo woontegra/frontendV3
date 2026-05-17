@@ -1,7 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { apiClient } from "@/utils/apiClient";
 import { clearTokens } from "@/auth/authToken";
-import { normalizeUserRole } from "@/shared/utils/profilePicture";
+import {
+  normalizeUserRole,
+  profilePictureFromApiUser,
+} from "@/shared/utils/profilePicture";
 
 export type AuthUser = {
   id?: number;
@@ -12,6 +15,7 @@ export type AuthUser = {
   role?: string;
   tenantId?: number;
   profilePicture?: string;
+  profilePictureUrl?: string;
   hasValidLicense?: boolean;
   licenseType?: string | null;
   licenseActive?: boolean;
@@ -27,11 +31,15 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function mapApiUser(data: Record<string, unknown>, profilePictureFallback?: string): AuthUser {
-  const profilePicture =
-    (typeof data.profilePicture === "string" && data.profilePicture) ||
-    profilePictureFallback ||
-    undefined;
+function mapApiUser(
+  data: Record<string, unknown>,
+  profilePictureFallback?: string,
+  profilePictureUrlFallback?: string,
+): AuthUser {
+  const fromApi = profilePictureFromApiUser(data);
+  const profilePicture = fromApi.profilePicture || profilePictureFallback || undefined;
+  const profilePictureUrl =
+    fromApi.profilePictureUrl || profilePictureUrlFallback || undefined;
 
   return {
     id: typeof data.id === "number" ? data.id : undefined,
@@ -42,6 +50,7 @@ function mapApiUser(data: Record<string, unknown>, profilePictureFallback?: stri
     role: normalizeUserRole(data.role),
     tenantId: typeof data.tenantId === "number" ? data.tenantId : undefined,
     profilePicture,
+    profilePictureUrl,
     hasValidLicense: data.licenseStatus === "OK",
     licenseType: typeof data.licenseType === "string" ? data.licenseType : null,
     licenseActive: data.licenseActive !== false,
@@ -56,7 +65,11 @@ function loadUserFromStorage(): AuthUser {
   }
   try {
     const parsed = JSON.parse(stored) as Record<string, unknown>;
-    return mapApiUser(parsed, typeof parsed.profilePicture === "string" ? parsed.profilePicture : undefined);
+    return mapApiUser(
+      parsed,
+      typeof parsed.profilePicture === "string" ? parsed.profilePicture : undefined,
+      typeof parsed.profilePictureUrl === "string" ? parsed.profilePictureUrl : undefined,
+    );
   } catch {
     localStorage.removeItem("current_user");
     return null;
@@ -101,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const stored = localStorage.getItem("current_user");
     let email: string | null = null;
     let profileFallback: string | undefined;
+    let profileUrlFallback: string | undefined;
 
     if (stored) {
       try {
@@ -108,6 +122,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email = typeof parsed.email === "string" ? parsed.email : null;
         profileFallback =
           typeof parsed.profilePicture === "string" ? parsed.profilePicture : undefined;
+        profileUrlFallback =
+          typeof parsed.profilePictureUrl === "string" ? parsed.profilePictureUrl : undefined;
       } catch {
         /* ignore */
       }
@@ -122,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (response.ok) {
         const data = (await response.json()) as Record<string, unknown>;
-        const updatedUser = mapApiUser(data, profileFallback);
+        const updatedUser = mapApiUser(data, profileFallback, profileUrlFallback);
         applyUser(updatedUser);
         return;
       }
@@ -170,7 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user) {
       persistUser(user);
     }
-  }, [user?.profilePicture, user?.name, user?.role, user?.email]);
+  }, [user?.profilePicture, user?.profilePictureUrl, user?.name, user?.role, user?.email]);
 
   const logout = () => {
     clearTokens();

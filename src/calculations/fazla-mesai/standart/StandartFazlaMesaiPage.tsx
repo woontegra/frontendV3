@@ -30,6 +30,7 @@ import { KatsayiModal } from "./KatsayiModal";
 import { MahsuplasamaModal } from "./MahsuplasamaModal";
 import { NotlarAccordion } from "./NotlarAccordion";
 import { FazlaMesaiCetvelToolbar } from "../shared/FazlaMesaiCetvelToolbar";
+import { MetinHesaplamasiAccordion } from "../shared/MetinHesaplamasiAccordion";
 import { Copy } from "lucide-react";
 import { downloadPdfFromDOM } from "@/utils/pdfExport";
 import { buildStyledReportTable } from "@/utils/styledReportTable";
@@ -916,13 +917,7 @@ export default function StandartFazlaMesaiPage() {
             </div>
           </section>
 
-          <section className="rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm bg-white dark:bg-gray-800">
-            <details className="group">
-              <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between list-none">
-                <span>Metin Hesaplaması</span>
-                <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-              </summary>
-              <div className="p-4 bg-white dark:bg-gray-800/50">
+          <MetinHesaplamasiAccordion contentClassName="bg-white dark:bg-gray-800/50">
                 <p className="text-xs text-red-600 dark:text-red-400 font-medium mb-2">Hesaplamalar asgari ücret dönemlerine göre yapılmıştır</p>
                 {Number(weeklyDays) === 7 && (
                   <div className="flex gap-2 mb-3">
@@ -942,12 +937,10 @@ export default function StandartFazlaMesaiPage() {
                     </button>
                   </div>
                 )}
-                <pre className="bg-gray-100 dark:bg-gray-700 p-3 rounded text-xs text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap leading-relaxed">
-                  {fmText || "Giriş ve çıkış saatlerini giriniz."}
-                </pre>
-              </div>
-            </details>
-          </section>
+            <pre className="bg-gray-100 dark:bg-gray-700 p-3 rounded text-xs text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap leading-relaxed">
+              {fmText || "Giriş ve çıkış saatlerini giriniz."}
+            </pre>
+          </MetinHesaplamasiAccordion>
 
           <div className="space-y-3">
             <YillikIzinPanel exclusions={exclusions} setExclusions={setExclusions} success={success} showToastError={showToastError} />
