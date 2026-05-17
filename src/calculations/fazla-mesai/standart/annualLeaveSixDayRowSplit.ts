@@ -11,6 +11,11 @@ import { getAsgariUcretByDate } from "@modules/fazla-mesai/shared";
 import type { FazlaMesaiRowBase } from "@modules/fazla-mesai/shared";
 import { FAZLA_MESAI_DENOMINATOR, FAZLA_MESAI_KATSAYI, WEEKLY_WORK_LIMIT } from "./constants";
 import { DAMGA_VERGISI_ORANI, GELIR_VERGISI_ORANI } from "@/utils/fazlaMesai/tableDisplayPipeline";
+import {
+  isStandartFmDebugEnabled,
+  logSixDayCollapse,
+  logSixDayWeekChunk,
+} from "./standartFmDebugLog";
 
 const EPS = 1e-7;
 
@@ -75,14 +80,19 @@ function formatLeaveCaptionInt(
   return `(${n} gün dışlama düşülmüştür: yıllık izin / UBGT / diğer)`;
 }
 
-type WeekChunk = {
+export type AnnualLeaveWeekChunk = {
   startISO: string;
   endISO: string;
   weeks: number;
   brut: number;
   fmHours: number;
   yillikIzinAciklama?: string;
+  workedDays?: number;
+  totalDays?: number;
+  excludedDays?: number;
 };
+
+type WeekChunk = AnnualLeaveWeekChunk;
 
 function mergeNormalWeekChunks(chunks: WeekChunk[]): WeekChunk[] {
   if (chunks.length === 0) return [];
@@ -106,7 +116,7 @@ function mergeNormalWeekChunks(chunks: WeekChunk[]): WeekChunk[] {
 }
 
 /** Düşüm haftaları araya girince kalan normal haftaları tek satırda toplar (ör. 43+1). */
-function collapseNormalChunksAroundDeductions(chunks: WeekChunk[], originalWeeks: number): WeekChunk[] {
+export function collapseNormalChunksAroundDeductions(chunks: WeekChunk[], originalWeeks: number): WeekChunk[] {
   const merged = mergeNormalWeekChunks(chunks);
   const deduction = merged.filter((c) => c.yillikIzinAciklama);
   const normal = merged.filter((c) => !c.yillikIzinAciklama);
@@ -186,35 +196,53 @@ export function expandStandartSegmentForSixDayAnnualLeave(
           : asgariBrut;
       let fmHours: number;
       let note: string | undefined;
+      let nIzin = 0;
+      let nUbgt = 0;
+      let nOther = 0;
+      let workedDays = 6;
+      let rawTotal = 0;
+      let totalRounded = 0;
       if (affected) {
-        const nIzin = countAnnualLeaveCalendarDaysInWindow(
+        nIzin = countAnnualLeaveCalendarDaysInWindow(
           clipStart,
           clipEnd,
           exclusions,
           weeklyOffDay,
           ["Yıllık İzin"]
         );
-        const nUbgt = countAnnualLeaveCalendarDaysInWindow(
+        nUbgt = countAnnualLeaveCalendarDaysInWindow(
           clipStart,
           clipEnd,
           exclusions,
           weeklyOffDay,
           ["UBGT"]
         );
-        const nOther = countAnnualLeaveCalendarDaysInWindow(
+        nOther = countAnnualLeaveCalendarDaysInWindow(
           clipStart,
           clipEnd,
           exclusions,
           weeklyOffDay,
           ["Rapor", "Diğer"]
         );
-        const workedDays = Math.max(0, 6 - leaveDaysInt);
-        const rawTotal = workedDays * dailyNet;
-        const totalRounded = bilirkisiRoundWeeklyTotalHours(rawTotal);
+        workedDays = Math.max(0, 6 - leaveDaysInt);
+        rawTotal = workedDays * dailyNet;
+        totalRounded = bilirkisiRoundWeeklyTotalHours(rawTotal);
         fmHours = Math.max(0, totalRounded - WEEKLY_WORK_LIMIT);
         note = formatLeaveCaptionInt(leaveDaysInt, nIzin, nUbgt, nOther);
       } else {
         fmHours = baselineWeeklyFm;
+      }
+      if (affected) {
+        logSixDayWeekChunk({
+          segmentIndex,
+          clipStart: clipStartISO,
+          clipEnd: toISODate(clipEnd),
+          leaveDaysInt,
+          nIzin,
+          nUbgt,
+          fmHours,
+          affected: true,
+        });
       }
       chunks.push({
         startISO: toISODate(clipStart),
@@ -232,6 +260,19 @@ export function expandStandartSegmentForSixDayAnnualLeave(
 
   const originalWeeks = Math.max(0, Number(row.weeks ?? row.originalWeekCount ?? 0));
   const merged = collapseNormalChunksAroundDeductions(chunks, originalWeeks);
+
+  if (isStandartFmDebugEnabled()) {
+    const deductionWeeks = merged
+      .filter((c) => c.yillikIzinAciklama)
+      .reduce((sum, c) => sum + c.weeks, 0);
+    logSixDayCollapse({
+      segmentIndex,
+      originalWeeks,
+      deductionWeeks,
+      combinedNormalWeeks: merged.find((c) => !c.yillikIzinAciklama)?.weeks,
+      chunkCountAfter: merged.length,
+    });
+  }
 
   return merged.map((c, j) => {
     const weeks = normalizeWeeksForStandard(c.startISO, c.endISO, c.weeks);

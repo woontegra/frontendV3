@@ -20,6 +20,7 @@ import {
   type FazlaMesaiRowBase,
 } from "@modules/fazla-mesai/shared";
 import { downloadPdfFromDOM } from "@/utils/pdfExport";
+import { apply270RuleFrontend } from "@/shared/utils/fazlaMesai/tableDisplayPipeline";
 import type { SeasonalPattern, DonemselWitness, DonemselState } from "./types";
 import {
   DEFAULT_SUMMER_PATTERN,
@@ -38,7 +39,11 @@ import {
   weeklyIgnoredWeekdayFromSeasonalPattern,
   toHtmlDateInputValue,
 } from "./utils";
-import { splitByExclusions } from "@/modules/tanikli-standart/rules/splitByExclusions.rule";
+import { expandDonemselRowsForDeductions } from "./expandDonemselRowsForDeductions";
+import {
+  applyDonemselHaftalikDeductionFmOverride,
+  expandDonemselHaftalikRowsForDeductions,
+} from "../donemsel-haftalik/expandDonemselHaftalikRowsForDeductions";
 import {
   calculateFm,
   calculateRowMoney,
@@ -266,10 +271,28 @@ export function DonemselFazlaMesaiCore({ config }: { config: DonemselFazlaMesaiR
       (a, r) => a + Math.max(0, Math.floor(Number(r.weeks) || 0)),
       0
     );
-    let pipeline = splitByExclusions(afterZaman as FazlaMesaiRowBase[], exclusions, {
-      weeklyOffDay: davaciWeeklyOffFallback,
-    });
+    let pipeline = haftalikMode
+      ? expandDonemselHaftalikRowsForDeductions({
+          rows: afterZaman as FazlaMesaiRowBase[],
+          exclusions,
+          weeklyOffDay: davaciWeeklyOffFallback,
+          seasonalDeductionContext: {
+            summerPattern: donemselState.summerPattern,
+            winterPattern: donemselState.winterPattern,
+            summerMonths: donemselState.summerPattern.months ?? [],
+          },
+        })
+      : expandDonemselRowsForDeductions({
+          rows: afterZaman as FazlaMesaiRowBase[],
+          exclusions,
+          weeklyOffDay: davaciWeeklyOffFallback,
+        });
     pipeline = pipeline.map((r) => calculateFm(r as TanikliRowWithSegmentFields));
+    if (haftalikMode) {
+      pipeline = pipeline.map((r) =>
+        applyDonemselHaftalikDeductionFmOverride(r as TanikliRowWithSegmentFields),
+      );
+    }
     pipeline = preserveWeeks(pipeline, originalTotalWeeks);
     pipeline = pipeline.map((r) => calculateRowMoney(r, katSayi || 1));
     const overrideMap = rowOverrides as Record<string, Partial<FazlaMesaiRowBase>>;
@@ -442,42 +465,47 @@ export function DonemselFazlaMesaiCore({ config }: { config: DonemselFazlaMesaiR
         return { ...r, fmHours };
       });
     } else if (mode270 === "detailed") {
-      const valid = with270.filter((r) => r.startISO && r.endISO);
-      const weeklyFM = valid[0]?.fmHours ?? davaciWeeklyFM;
-      const tabloSatirlari = valid.map((r) => ({
-        baslangic: new Date(r.startISO!),
-        bitis: new Date(r.endISO!),
-      }));
-      if (tabloSatirlari.length > 0 && donemselState.dateIn && donemselState.dateOut && weeklyFM > 0) {
-        const sonuclar = calculateOvertimeWith270AndLimitation({
-          iseGirisTarihi: new Date(donemselState.dateIn),
-          istenCikisTarihi: new Date(donemselState.dateOut),
-          haftalikFazlaMesaiSaati: weeklyFM,
-          zamanaSimiTarihi: zamanasimiBaslangic ? new Date(zamanasimiBaslangic) : undefined,
-          yillikIzinler: [],
-          tabloSatirlari,
-        });
-        with270 = with270.map((r) => {
-          const j = valid.findIndex((v) => v.id === r.id);
-          if (j >= 0 && sonuclar[j] != null) {
-            const rawWeeks = r.originalWeekCount ?? r.weeks ?? 0;
-            const adjusted = sonuclar[j].fmHafta;
-            const isManual = !!r.isManual;
-            const newWeeks = Number.isFinite(adjusted)
-              ? isManual && adjusted <= 0
-                ? Math.max(1, rawWeeks)
-                : adjusted > 0
-                  ? adjusted
-                  : rawWeeks
-              : rawWeeks;
-            return {
-              ...r,
-              weeks: newWeeks > 0 ? newWeeks : rawWeeks,
-              originalWeekCount: r.originalWeekCount ?? r.weeks,
-            } as FazlaMesaiRowBase;
-          }
-          return r;
-        });
+      if (haftalikMode) {
+        // Yaz/kış ve düşüm satırlarının FM’si farklı; tek haftalık FM ile calculateOvertimeWith270AndLimitation uyumsuz.
+        with270 = apply270RuleFrontend(with270) as typeof with270;
+      } else {
+        const valid = with270.filter((r) => r.startISO && r.endISO);
+        const weeklyFM = valid[0]?.fmHours ?? davaciWeeklyFM;
+        const tabloSatirlari = valid.map((r) => ({
+          baslangic: new Date(r.startISO!),
+          bitis: new Date(r.endISO!),
+        }));
+        if (tabloSatirlari.length > 0 && donemselState.dateIn && donemselState.dateOut && weeklyFM > 0) {
+          const sonuclar = calculateOvertimeWith270AndLimitation({
+            iseGirisTarihi: new Date(donemselState.dateIn),
+            istenCikisTarihi: new Date(donemselState.dateOut),
+            haftalikFazlaMesaiSaati: weeklyFM,
+            zamanaSimiTarihi: zamanasimiBaslangic ? new Date(zamanasimiBaslangic) : undefined,
+            yillikIzinler: [],
+            tabloSatirlari,
+          });
+          with270 = with270.map((r) => {
+            const j = valid.findIndex((v) => v.id === r.id);
+            if (j >= 0 && sonuclar[j] != null) {
+              const rawWeeks = r.originalWeekCount ?? r.weeks ?? 0;
+              const adjusted = sonuclar[j].fmHafta;
+              const isManual = !!r.isManual;
+              const newWeeks = Number.isFinite(adjusted)
+                ? isManual && adjusted <= 0
+                  ? Math.max(1, rawWeeks)
+                  : adjusted > 0
+                    ? adjusted
+                    : rawWeeks
+                : rawWeeks;
+              return {
+                ...r,
+                weeks: newWeeks > 0 ? newWeeks : rawWeeks,
+                originalWeekCount: r.originalWeekCount ?? r.weeks,
+              } as FazlaMesaiRowBase;
+            }
+            return r;
+          });
+        }
       }
     }
 
@@ -489,6 +517,7 @@ export function DonemselFazlaMesaiCore({ config }: { config: DonemselFazlaMesaiR
     katSayi,
     davaciWeeklyFM,
     mode270,
+    haftalikMode,
     donemselState.dateIn,
     donemselState.dateOut,
     zamanasimiBaslangic,

@@ -34,7 +34,8 @@ import { fmt, fmtCurrency } from "../standart/calculations";
 import { calculateDailyWorkHours, computeBreakHours } from "../standart/utils";
 import { STANDARD_DAILY_REFERENCE_HOURS } from "../standart/constants";
 import { ceilWeeklyWorkHoursToHalfHour } from "@/shared/utils/fazlaMesai/weeklyHoursRounding";
-import { expandGemiRowsAnnualLeaveUbgt, type GemiExpandSourceRow } from "./gemiAnnualLeaveUbgtExpand";
+import type { GemiExpandSourceRow } from "./gemiAnnualLeaveUbgtExpand";
+import { expandGemiGunlukRowsForDeductions } from "./expandGemiGunlukRowsForDeductions";
 import { DAMGA_VERGISI_ORANI } from "@/utils/fazlaMesai/tableDisplayPipeline";
 import { calculateIncomeTaxWithBrackets } from "@/utils/incomeTaxCore";
 import {
@@ -286,6 +287,16 @@ export default function GemiAdamiGunlukPage() {
 
   const diff = useMemo(() => calcWorkPeriodBilirKisi(iseGiris, istenCikis), [iseGiris, istenCikis]);
 
+  /** UBGT/yıllık izin düşüm FM yeniden hesabı için davacı günlük net çalışma. */
+  const davaciDailyNet = useMemo(() => {
+    const tin = normalizeTimeStr(davaci?.in);
+    const tout = normalizeTimeStr(davaci?.out);
+    if (!tin || !tout) return null;
+    const brut = calculateDailyWorkHours(tin, tout);
+    const net = Math.max(0, brut - computeBreakHours(brut));
+    return Number.isFinite(net) ? net : null;
+  }, [davaci?.in, davaci?.out]);
+
   /** UBGT kataloğu: yalnızca cetvel satırlarının birleşik aralığı (davacı/tanık beyanına göre genişletilmez). */
   const ubgtFmCatalogRange = useMemo(() => {
     let start = "";
@@ -528,16 +539,25 @@ export default function GemiAdamiGunlukPage() {
             }
           }
           let pipeRows: GemiRow[] = merged;
-          // UBGT / yıllık izin / rapor / diğer dışlamalar: günlük ve 7/24 için aynı blok kuralları (gemiAnnualLeaveUbgtExpand).
           if (exclusions.length > 0) {
             const weeklyOffNum =
               haftaTatiliGunu === "" || haftaTatiliGunu == null ? null : Number(haftaTatiliGunu);
-            pipeRows = expandGemiRowsAnnualLeaveUbgt(merged as GemiExpandSourceRow[], exclusions, {
-              hg: Number(weeklyDays) || 6,
-              weeklyOffDay: Number.isInteger(weeklyOffNum) ? weeklyOffNum : null,
-              davaciSevenDay: activeTab,
-              applyYargitay270FmDeduction: include270 && mode270 === "simple",
-            }) as GemiRow[];
+            const weeklyOffDay = Number.isInteger(weeklyOffNum) ? weeklyOffNum : null;
+            const expandFmParams =
+              davaciDailyNet != null
+                ? {
+                    dailyNet: davaciDailyNet,
+                    hg: Number(weeklyDays) || 6,
+                    weeklyOffDay,
+                    davaciSevenDay: activeTab,
+                    applyYargitay270FmDeduction: include270 && mode270 === "simple",
+                  }
+                : undefined;
+            pipeRows = expandGemiGunlukRowsForDeductions(
+              merged as GemiExpandSourceRow[],
+              exclusions,
+              { weeklyOffDay, fmParams: expandFmParams },
+            ) as GemiRow[];
           }
           // Tanık FM’si zaten `withBestFM` + birleştirmede uygulandı. Expand sonrası tekrar uygulanırsa
           // UBGT/yıllık izin haftası satırlarının yeniden hesaplanmış FM saati tanık değeriyle ezilir.
@@ -581,6 +601,7 @@ export default function GemiAdamiGunlukPage() {
     include270,
     mode270,
     haftaTatiliGunu,
+    davaciDailyNet,
   ]);
 
   const mergedCetvelRows = useMemo(() => {

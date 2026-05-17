@@ -170,6 +170,8 @@ export async function login(
   localStorage.setItem("current_user", JSON.stringify(userWithLicense));
   localStorage.setItem("tenant_id", String(data.user.tenantId || "1"));
   localStorage.setItem("email", data.user.email);
+  localStorage.setItem("user_id", String(data.user.id ?? ""));
+  localStorage.setItem("user_role", (data.user.role ?? "").toLowerCase());
 
   if (data.professionalLicenseValid) {
     localStorage.setItem("licenseValid", "true");

@@ -34,8 +34,7 @@ import { Copy } from "lucide-react";
 import { downloadPdfFromDOM } from "@/utils/pdfExport";
 import { buildStyledReportTable } from "@/utils/styledReportTable";
 import { calculateDailyWorkHours, computeBreakHours, calculateWeeklyFMSaat } from "./utils";
-import { expandStandartRowsForSixDayAnnualLeave } from "./annualLeaveSixDayRowSplit";
-import { expandTanikliStandartRowsAnnualLeaveV2 } from "../shared/tanikli-standart/tanikliStandartAnnualLeaveV2";
+import { expandStandartRowsForDeductions } from "./expandStandartRowsForDeductions";
 import { STANDARD_DAILY_REFERENCE_HOURS } from "./constants";
 import { useStandartFazlaMesaiState } from "./state";
 import { fmt, fmtCurrency } from "./calculations";
@@ -59,6 +58,7 @@ import {
   calcSectionTitleCls as sectionTitleCls,
 } from "@/shared/calcPageFormStyles";
 import styles from "./StandartFazlaMesaiPage.module.css";
+import { isStandartFmDebugEnabled, logStandartFmPipeline } from "./standartFmDebugLog";
 
 const PAGE_TITLE = "Standart Fazla Mesai Hesaplama";
 const RECORD_TYPE = "fazla_mesai_standart";
@@ -321,18 +321,6 @@ export default function StandartFazlaMesaiPage() {
       });
     });
 
-      const useFiveDayAnnualLeaveSplit =
-        Number(weeklyDays) === 5 &&
-        exclusions.length > 0 &&
-        dailyWorkingHours > 0;
-      const useSixDayAnnualLeaveSplit =
-        Number(weeklyDays) === 6 &&
-        exclusions.length > 0 &&
-        dailyWorkingHours > 0;
-      const useSevenDayAnnualLeaveSplit =
-        Number(weeklyDays) === 7 &&
-        exclusions.length > 0 &&
-        dailyWorkingHours > 0;
       const weeklyOffDayNum =
         haftaTatiliGunu === "" || haftaTatiliGunu == null ? null : Number(haftaTatiliGunu);
       const weeklyOffDay = Number.isInteger(weeklyOffDayNum) ? weeklyOffDayNum : null;
@@ -340,38 +328,21 @@ export default function StandartFazlaMesaiPage() {
       const withManualBrut = (list: FazlaMesaiRowBase[]) => applyResolvedManualBrutToRows(list, overrideMap);
       const workingRows = withManualBrut(tableRows as FazlaMesaiRowBase[]);
 
-      if (useSixDayAnnualLeaveSplit) {
+      const useDeductionExpand = exclusions.length > 0 && dailyWorkingHours > 0;
+      if (useDeductionExpand) {
+        const wd = Number(weeklyDays) || 6;
+        const sevenDayMode: "tatilli" | "tatilsiz" = wd === 7 ? activeTab : "tatilsiz";
         return withManualBrut(
-          expandStandartRowsForSixDayAnnualLeave(
-            workingRows,
+          expandStandartRowsForDeductions({
+            rows: workingRows,
             exclusions,
-            dailyWorkingHours,
-            weeklyFMSaat,
+            weeklyDays: wd,
+            dailyNet: dailyWorkingHours,
+            baselineWeeklyFm: weeklyFMSaat,
+            davaciSevenDay: sevenDayMode,
             weeklyOffDay,
-            overrideMap,
-          ),
-        );
-      }
-      if (useSevenDayAnnualLeaveSplit) {
-        return withManualBrut(
-          expandTanikliStandartRowsAnnualLeaveV2(
-            workingRows as Array<FazlaMesaiRowBase & { dailyNet?: number }>,
-            exclusions,
-            7,
-            weeklyOffDay,
-            activeTab,
-          ),
-        );
-      }
-      if (useFiveDayAnnualLeaveSplit) {
-        return withManualBrut(
-          expandTanikliStandartRowsAnnualLeaveV2(
-            workingRows as Array<FazlaMesaiRowBase & { dailyNet?: number }>,
-            exclusions,
-            5,
-            weeklyOffDay,
-            "tatilsiz",
-          ),
+            rowOverrides: overrideMap,
+          }),
         );
       }
 
@@ -496,6 +467,62 @@ export default function StandartFazlaMesaiPage() {
       ),
     [computedDisplayRows],
   );
+
+  const fmSplitPath = useMemo((): "none" | "sixDay" | "fiveDay" | "sevenDay" => {
+    const wd = Number(weeklyDays);
+    if (
+      exclusions.length > 0 &&
+      dailyWorkingHours > 0 &&
+      (wd === 5 || wd === 6 || wd === 7)
+    ) {
+      if (wd === 6) return "sixDay";
+      if (wd === 7) return "sevenDay";
+      if (wd === 5) return "fiveDay";
+    }
+    return "none";
+  }, [weeklyDays, exclusions.length, dailyWorkingHours]);
+
+  useEffect(() => {
+    if (!isStandartFmDebugEnabled()) return;
+    if (!iseGiris || !istenCikis) return;
+    const skipAnnualLeaveExclusions =
+      (Number(weeklyDays) === 5 || Number(weeklyDays) === 6 || Number(weeklyDays) === 7) &&
+      exclusions.length > 0 &&
+      dailyWorkingHours > 0;
+    logStandartFmPipeline(
+      {
+        iseGiris,
+        istenCikis,
+        weeklyDays,
+        dailyWorkingHours,
+        weeklyFMSaat,
+        haftaTatiliGunu,
+        activeTab,
+        exclusions,
+        splitPath: fmSplitPath,
+        baseSegmentCount: (rows as FazlaMesaiRowBase[]).filter((r) =>
+          String(r.id ?? "").startsWith("auto-"),
+        ).length,
+        rawRowCount: (rows as FazlaMesaiRowBase[]).length,
+        displayRowCount: (computedDisplayRows as FazlaMesaiRowBase[]).length,
+        skipAnnualLeaveExclusions,
+      },
+      rows as FazlaMesaiRowBase[],
+      computedDisplayRows as FazlaMesaiRowBase[],
+    );
+  }, [
+    iseGiris,
+    istenCikis,
+    weeklyDays,
+    dailyWorkingHours,
+    weeklyFMSaat,
+    haftaTatiliGunu,
+    activeTab,
+    exclusions,
+    fmSplitPath,
+    rows,
+    computedDisplayRows,
+  ]);
 
   const handleApplyManualWageBruts = useCallback(
     (brutById: Record<string, number>) => {

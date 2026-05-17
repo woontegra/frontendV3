@@ -130,6 +130,7 @@ export default function UploadAvatarDialog({
           setUser(updatedUser);
           // localStorage'ı da hemen güncelle
           localStorage.setItem("current_user", JSON.stringify(updatedUser));
+          window.dispatchEvent(new Event("auth-changed"));
         }
         
         // Update parent component - base64'i kullan (eğer varsa)
@@ -184,6 +185,7 @@ export default function UploadAvatarDialog({
           setUser(updatedUser);
           // localStorage'ı da hemen güncelle
           localStorage.setItem("current_user", JSON.stringify(updatedUser));
+          window.dispatchEvent(new Event("auth-changed"));
         }
         
         setSelectedFile(null);

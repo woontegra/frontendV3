@@ -5,6 +5,7 @@ import { calculationModules, type CalculationModuleRoute } from "@/calculations/
 import GlobalCalculationTools from "@/components/GlobalCalculationTools";
 import AppBreadcrumb from "./AppBreadcrumb";
 import AppHeader from "./AppHeader";
+import { isAdminRole } from "@/shared/utils/profilePicture";
 import styles from "./AppShell.module.css";
 
 function renderCalculationSidebarInterior(module: CalculationModuleRoute) {
@@ -44,9 +45,10 @@ function readIsAdmin(): boolean {
   try {
     const currentUser = JSON.parse(localStorage.getItem("current_user") || "null") as {
       role?: string;
+      tenantId?: number;
     } | null;
-    const tenantId = Number(localStorage.getItem("tenant_id") || "1");
-    return currentUser?.role === "admin" || tenantId === 1;
+    const tenantId = Number(currentUser?.tenantId ?? localStorage.getItem("tenant_id") ?? "1");
+    return isAdminRole(currentUser?.role, tenantId);
   } catch {
     return Number(localStorage.getItem("tenant_id") || "1") === 1;
   }

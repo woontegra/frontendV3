@@ -30,7 +30,8 @@ import { downloadPdfFromDOM } from "@/utils/pdfExport";
 import { buildStyledReportTable } from "@/utils/styledReportTable";
 import { useTanikliStandartState } from "../tanikli-standart/state";
 import { fmt, fmtCurrency } from "../standart/calculations";
-import { expandGemiRowsAnnualLeaveUbgt, type GemiExpandSourceRow } from "../gemi-adami-gunluk/gemiAnnualLeaveUbgtExpand";
+import type { GemiExpandSourceRow } from "../gemi-adami-gunluk/gemiAnnualLeaveUbgtExpand";
+import { expandGemi724RowsForDeductions } from "./expandGemi724RowsForDeductions";
 import { DAMGA_VERGISI_ORANI } from "@/utils/fazlaMesai/tableDisplayPipeline";
 import { calculateIncomeTaxWithBrackets } from "@/utils/incomeTaxCore";
 import {
@@ -148,9 +149,6 @@ export default function GemiAdami724Page() {
   } = useTanikliStandartState();
 
   const [rows, setRows] = useState<GemiRow[]>([]);
-  const [textPeriods, setTextPeriods] = useState<
-    Array<{ startDate?: string; endDate?: string; text?: string; witnessTitle?: string }>
-  >([]);
   const [hoveredGemiRow, setHoveredGemiRow] = useState<number | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [haftalikMesaiDisplay, setHaftalikMesaiDisplay] = useState(HAFTALIK_FM_724);
@@ -303,7 +301,6 @@ export default function GemiAdami724Page() {
     const dEnd = normalizeDateInput(istenCikis);
     if (!dStart || !dEnd) {
       setRows([]);
-      setTextPeriods([]);
       return;
     }
 
@@ -455,12 +452,14 @@ export default function GemiAdami724Page() {
           if (exclusions.length > 0) {
             const weeklyOffNum =
               haftaTatiliGunu === "" || haftaTatiliGunu == null ? null : Number(haftaTatiliGunu);
-            pipeRows = expandGemiRowsAnnualLeaveUbgt(merged as GemiExpandSourceRow[], exclusions, {
-              hg: 7,
-              weeklyOffDay: Number.isInteger(weeklyOffNum) ? weeklyOffNum : null,
-              davaciSevenDay: "tatilsiz",
-              applyYargitay270FmDeduction: include270 && mode270 === "simple",
-            }) as GemiRow[];
+            pipeRows = expandGemi724RowsForDeductions(
+              merged as GemiExpandSourceRow[],
+              exclusions,
+              {
+                weeklyOffDay: Number.isInteger(weeklyOffNum) ? weeklyOffNum : null,
+                applyYargitay270FmDeduction: include270 && mode270 === "simple",
+              },
+            ) as GemiRow[];
           }
           const processedFromBackend = pipeRows;
 
@@ -474,11 +473,9 @@ export default function GemiAdami724Page() {
             }));
             return [...apiRows, ...manualRows];
           });
-          setTextPeriods(result.textPeriods || []);
         } catch (e) {
           if (requestId === backendRequestIdRef.current) {
             setRows([]);
-            setTextPeriods([]);
             console.error("[Gemi724]", e);
           }
         } finally {
@@ -506,13 +503,6 @@ export default function GemiAdami724Page() {
       return { ...r, fm, net };
     }) as GemiRow[];
   }, [rows, rowOverrides, katSayi]);
-
-  const stepsText = useMemo(() => {
-    const parts = textPeriods.map((p) => p.text || "").filter(Boolean);
-    if (parts.length > 0) return parts.join("\n\n");
-    const fromRows = rows.map((r) => r.text || "").filter(Boolean);
-    return fromRows.join("\n\n");
-  }, [textPeriods, rows]);
 
   const totalBrut = useMemo(() => mergedCetvelRows.reduce((a, r) => a + (Number(r.fm) || 0), 0), [mergedCetvelRows]);
 
@@ -986,11 +976,6 @@ export default function GemiAdami724Page() {
                     <pre className="text-xs leading-relaxed whitespace-pre-wrap text-gray-800 dark:text-gray-200 m-0 font-sans">
                       {GEMI_724_METIN_SABLON}
                     </pre>
-                    {stepsText ? (
-                      <div className="mt-4 pt-4 border-t border-gray-300 dark:border-gray-600 text-xs leading-relaxed whitespace-pre-wrap text-gray-800 dark:text-gray-200">
-                        {stepsText}
-                      </div>
-                    ) : null}
                   </div>
                 </div>
               </details>

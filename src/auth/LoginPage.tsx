@@ -33,6 +33,7 @@ export default function LoginPage() {
       const data = await login(email.trim(), password, baroTrackingToken);
 
       persistV3Session(data.user.email);
+      window.dispatchEvent(new Event("auth-changed"));
 
       if (rememberMe) {
         localStorage.setItem("remember_email", email.trim());

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { 
   User, 
@@ -20,7 +20,12 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { AuthUser } from "@/context/AuthContext";
 import UploadAvatarDialog from "@/components/profile/UploadAvatarDialog";
-import { API_BASE_URL } from "@/utils/apiClient";
+import {
+  getStoredAvatarBase64,
+  isAdminRole,
+  resolveProfilePictureUrl,
+  roleDisplayLabel,
+} from "@/shared/utils/profilePicture";
 
 interface UserMenuProps {
   user: AuthUser;
@@ -33,45 +38,23 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
 
-  // Load avatar - önce base64'ten, yoksa backend'den
-  useEffect(() => {
+  const syncAvatar = useCallback(() => {
     if (!user?.id) {
       setAvatarUrl(null);
       return;
     }
-
-    // Önce localStorage'dan base64'i kontrol et
-    try {
-      const base64Avatar = localStorage.getItem(`avatar_base64_${user.id}`);
-      if (base64Avatar && base64Avatar.startsWith('data:image/')) {
-        console.log('[UserMenu] Using base64 avatar from localStorage');
-        setAvatarUrl(base64Avatar);
-        return;
-      }
-    } catch (err) {
-      console.error('[UserMenu] Failed to read base64 from localStorage:', err);
-    }
-
-    // Base64 yoksa backend path'ini kullan
-    if (user?.profilePicture) {
-      let profilePath = user.profilePicture;
-      
-      // Eğer path / ile başlamıyorsa ekle
-      if (!profilePath.startsWith('/')) {
-        profilePath = '/' + profilePath;
-      }
-      
-      const baseUrl = `${API_BASE_URL}${profilePath}`;
-      
-      console.log('[UserMenu] Using backend avatar URL:', baseUrl);
-      
-      if (avatarUrl !== baseUrl) {
-        setAvatarUrl(baseUrl);
-      }
-    } else {
-      setAvatarUrl(null);
-    }
+    setAvatarUrl(resolveProfilePictureUrl(user.id, user.profilePicture));
   }, [user?.id, user?.profilePicture]);
+
+  useEffect(() => {
+    syncAvatar();
+  }, [syncAvatar]);
+
+  useEffect(() => {
+    const onAuthChanged = () => syncAvatar();
+    window.addEventListener("auth-changed", onAuthChanged);
+    return () => window.removeEventListener("auth-changed", onAuthChanged);
+  }, [syncAvatar]);
 
   useEffect(() => {
     return () => {
@@ -79,18 +62,30 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
     };
   }, []);
 
-  const initials = (user?.name || user?.email || "U?")
-    .split(" ")
+  const displayName = user?.name?.trim() || user?.email || "Hesabım";
+  const displayEmail = user?.email || "";
+  const roleLabel = roleDisplayLabel(user?.role, user?.tenantId);
+  const showAdminBadge = isAdminRole(user?.role, user?.tenantId);
+
+  const initials = (user?.name?.trim() || user?.email || "?")
+    .split(/\s+/)
+    .filter(Boolean)
     .map((p) => p[0])
     .slice(0, 2)
     .join("")
     .toUpperCase();
 
-  const displayName = user?.name || user?.email || "Kullanıcı";
-  const displayEmail = user?.email || "";
-
   const handleAvatarChange = (url: string | null) => {
     setAvatarUrl(url);
+  };
+
+  const handleAvatarError = () => {
+    const base64 = getStoredAvatarBase64(user?.id);
+    if (base64) {
+      setAvatarUrl(base64);
+      return;
+    }
+    setAvatarUrl(null);
   };
 
   const handleMouseEnter = () => {
@@ -110,6 +105,7 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           <button
+            type="button"
             className={cn(
               "flex items-center gap-2 px-2 py-1 rounded-lg",
               "hover:bg-gray-100 dark:hover:bg-gray-800 transition"
@@ -118,24 +114,25 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
           >
             <Avatar className="h-8 w-8">
               {avatarUrl ? (
-                <AvatarImage 
-                  src={avatarUrl} 
+                <AvatarImage
+                  src={avatarUrl}
                   alt={displayName}
-                  onLoad={() => {
-                    console.log('[UserMenu] Avatar image loaded successfully:', avatarUrl);
-                  }}
-                  onError={(e) => {
-                    console.error('[UserMenu] Avatar image failed to load:', avatarUrl);
-                    console.error('[UserMenu] Error event:', e);
-                    // Fallback'e geçmek için avatarUrl'i null yap
-                    setAvatarUrl(null);
-                  }}
+                  onError={handleAvatarError}
                 />
               ) : (
                 <AvatarFallback>{initials}</AvatarFallback>
               )}
             </Avatar>
-            <span className="hidden md:inline text-sm text-gray-700 dark:text-gray-200">{displayName}</span>
+            <span className="hidden md:flex md:flex-col md:items-start md:leading-tight">
+              <span className="text-sm text-gray-700 dark:text-gray-200">{displayName}</span>
+              {showAdminBadge ? (
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                  Admin
+                </span>
+              ) : (
+                <span className="text-[10px] text-gray-500 dark:text-gray-400">{roleLabel}</span>
+              )}
+            </span>
             <ChevronDown className="w-4 h-4 text-gray-500" />
           </button>
         </DropdownMenuTrigger>
@@ -163,20 +160,10 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
               >
                 <Avatar className="h-12 w-12 border-2 border-white shadow-md ring-2 ring-gray-100 transition-all duration-200 group-hover:ring-blue-300 dark:group-hover:ring-blue-500 group-hover:scale-105">
                   {avatarUrl ? (
-                    <AvatarImage 
-                      src={avatarUrl} 
+                    <AvatarImage
+                      src={avatarUrl}
                       alt={displayName}
-                      onLoad={() => {
-                        if (process.env.NODE_ENV === 'development') {
-                          console.log('[UserMenu] Avatar image loaded successfully:', avatarUrl);
-                        }
-                      }}
-                      onError={(e) => {
-                        console.error('[UserMenu] Avatar image failed to load:', avatarUrl);
-                        console.error('[UserMenu] Error event:', e);
-                        // Fallback'e geç
-                        setAvatarUrl(null);
-                      }}
+                      onError={handleAvatarError}
                     />
                   ) : (
                     <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-700 text-white text-base font-semibold">
@@ -203,6 +190,13 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-gray-900 dark:text-gray-100">{displayName}</div>
                 <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{displayEmail}</div>
+                {showAdminBadge ? (
+                  <span className="inline-block mt-1 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                    Admin
+                  </span>
+                ) : (
+                  <span className="inline-block mt-1 text-[10px] text-gray-500 dark:text-gray-400">{roleLabel}</span>
+                )}
               </div>
             </div>
           </div>
@@ -257,6 +251,7 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
           <div className="p-2">
             <DropdownMenuItem asChild>
               <button
+                type="button"
                 onClick={() => logout()}
                 className={cn(
                   "w-full flex items-center justify-start gap-3 px-4 py-2.5 text-sm",

@@ -23,7 +23,7 @@ import {
   type FazlaMesaiRowBase,
 } from "@modules/fazla-mesai/shared";
 import { startOfDay } from "date-fns";
-import { splitByExclusions } from "@/modules/tanikli-standart/rules/splitByExclusions.rule";
+import { expandTanikliRowsForDeductions } from "./expandTanikliRowsForDeductions";
 import {
   calculateFm,
   calculateRowMoney,
@@ -466,7 +466,9 @@ export default function TanikliStandartPage() {
       0
     );
 
-    let pipeline = splitByExclusions(tableRows as FazlaMesaiRowBase[], exclusions, {
+    let pipeline = expandTanikliRowsForDeductions({
+      rows: tableRows as FazlaMesaiRowBase[],
+      exclusions,
       weeklyOffDay: weeklyOff,
     });
     pipeline = pipeline.map((r) => calculateFm(r as TanikliRowWithSegmentFields));

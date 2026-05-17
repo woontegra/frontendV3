@@ -270,7 +270,7 @@ function expandOneGemiRow(
   if (!Number.isFinite(dailyNet) || dailyNet <= 0) {
     const fm = Number(baselineFm);
     if (hgSafe > 0 && Number.isFinite(fm) && fm >= 0) {
-      dailyNet = (fm + 45) / hgSafe;
+      dailyNet = (fm + WEEKLY_WORK_LIMIT) / hgSafe;
     }
   }
   if (!Number.isFinite(dailyNet) || dailyNet <= 0) return [row];

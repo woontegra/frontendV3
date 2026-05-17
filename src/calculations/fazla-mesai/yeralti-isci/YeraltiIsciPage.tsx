@@ -11,6 +11,11 @@ import { calcWorkPeriodBilirKisi, calculateWeeksBetweenDates, isoToTR } from "@/
 import { apiPost } from "@/shared/utils/apiClient";
 import { buildWordTable, adaptToWordTable, copySectionForWord, clampToLastDayOfMonth, getAsgariUcretByDate } from "@modules/fazla-mesai/shared";
 import { expandYeraltiRowsForExclusions } from "./yeraltiAnnualLeaveUbgtExpand";
+import {
+  exclusionsNeedLegacySplit,
+  expandYeraltiRowsForDeductions,
+} from "./expandYeraltiRowsForDeductions";
+import { buildYeraltiMetinKartlari } from "./groupYeraltiMetinCards";
 import { YillikIzinPanel } from "../standart/YillikIzinPanel";
 import { UbgtFmDayPicker } from "../standart/UbgtFmDayPicker";
 import { ZamanasimiModal } from "../standart/ZamanasimiModal";
@@ -261,11 +266,12 @@ export default function YeraltiIsciPage() {
       const [h, m] = (t || "0:0").split(":").map(Number);
       return (h || 0) * 60 + (m || 0);
     };
+    /** Backend `yeraltiIsci.service.js` `computeBreakHours` ile uyumlu (11 saat → 1 saat mola). */
     const computeBreak = (b: number) => {
       if (!Number.isFinite(b) || b <= 0) return 0;
       if (b <= 4) return 0.25;
       if (b <= 7.5) return 0.5;
-      if (b < 11) return 1;
+      if (b <= 11) return 1;
       if (b < 14) return 1.5;
       if (b < 15) return 2;
       return 3;
@@ -381,8 +387,12 @@ export default function YeraltiIsciPage() {
           const _toMin = (t: string) => { const [h, m] = (t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
           const _computeBreak = (b: number) => {
             if (!Number.isFinite(b) || b <= 0) return 0;
-            if (b <= 4) return 0.25; if (b <= 7.5) return 0.5;
-            if (b < 11) return 1; if (b < 14) return 1.5; if (b < 15) return 2; return 3;
+            if (b <= 4) return 0.25;
+            if (b <= 7.5) return 0.5;
+            if (b <= 11) return 1;
+            if (b < 14) return 1.5;
+            if (b < 15) return 2;
+            return 3;
           };
           const _dIn = _toMin(davaci?.in || ""); const _dOut = _toMin(davaci?.out || "");
           const _hg = Number(weeklyDays) || 6;
@@ -444,15 +454,26 @@ export default function YeraltiIsciPage() {
               ? (h: number) => Math.max(0, h - YARGITAY_270_HAFTALIK_FM_DUSUM_SAAT)
               : (h: number) => h;
 
-          const expandedFromBackend =
-            exclusions.length > 0 && davaciDailyNet != null
-              ? expandYeraltiRowsForExclusions(processedFromBackend, exclusions, {
+          const yeraltiExpandFmParams =
+            davaciDailyNet != null
+              ? {
                   dailyNet: davaciDailyNet,
                   hg: Number(weeklyDays) || 6,
                   weeklyOffDay,
-                  davaciSevenDay: Number(weeklyDays) === 7 && activeTab === "tatilli" ? "tatilli" : "tatilsiz",
+                  davaciSevenDay:
+                    Number(weeklyDays) === 7 && activeTab === "tatilli" ? "tatilli" : "tatilsiz",
                   applyLeaveFmAdj,
-                })
+                }
+              : undefined;
+
+          const expandedFromBackend =
+            exclusions.length > 0 && yeraltiExpandFmParams
+              ? exclusionsNeedLegacySplit(exclusions)
+                ? expandYeraltiRowsForExclusions(processedFromBackend, exclusions, yeraltiExpandFmParams)
+                : expandYeraltiRowsForDeductions(processedFromBackend, exclusions, {
+                    weeklyOffDay,
+                    fmParams: yeraltiExpandFmParams,
+                  })
               : processedFromBackend;
           // ──────────────────────────────────────────────────────────────────────
 
@@ -678,16 +699,26 @@ export default function YeraltiIsciPage() {
     if (effectiveId) navigate(REDIRECT_BASE_PATH);
   }, [effectiveId, navigate]);
 
-  const fmPeriodsForUi = useMemo(() => {
-    if (textPeriods.length > 0) {
-      return textPeriods.map((p) => ({
-        text:
-          p.text ||
-          `${formatDateTR(p.startDate)} – ${formatDateTR(p.endDate)}`,
-      }));
-    }
-    return [];
-  }, [textPeriods]);
+  /** Tanıklı Standart: davacı 1 kart + her tanık 1 kart; kişi başına tek özet metin. */
+  const metinHesabiKartlari = useMemo(
+    () =>
+      buildYeraltiMetinKartlari({
+        davaciIn: davaci?.in || "",
+        davaciOut: davaci?.out || "",
+        weeklyDays: Number(weeklyDays) || 6,
+        activeTab: Number(weeklyDays) === 7 && activeTab === "tatilli" ? "tatilli" : "tatilsiz",
+        witnesses: taniklar.map((t) => ({
+          id: t.id,
+          name: t.name,
+          dateIn: t.dateIn,
+          dateOut: t.dateOut,
+          in: t.in,
+          out: t.out,
+          weeklyDays: t.weeklyDays,
+        })),
+      }),
+    [davaci?.in, davaci?.out, taniklar, weeklyDays, activeTab],
+  );
 
   const wordTableSections = useMemo(() => {
     const s: Array<{ id: string; title: string; html: string; htmlForPdf: string }> = [];
@@ -1021,7 +1052,7 @@ export default function YeraltiIsciPage() {
                 </summary>
                 <div className="p-4">
                   <p className="text-xs text-red-600 dark:text-red-400 font-medium mb-3">
-                    Metinler sunucu hesaplamasından gelir (yeraltı usulü, 6:15 hafta tatili referansı).
+                    Özet metinler girilen saatlere göre hesaplanır (yeraltı usulü, 37:30 haftalık sınır, 6:15 hafta tatili referansı).
                   </p>
                   {Number(weeklyDays) === 7 && (
                     <div className="flex gap-2 mb-3">
@@ -1053,14 +1084,17 @@ export default function YeraltiIsciPage() {
                     {isCalculating && (
                       <p className="text-xs text-gray-500 mb-2">Hesaplanıyor…</p>
                     )}
-                    {fmPeriodsForUi.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {fmPeriodsForUi.map((p, idx) => (
+                    {metinHesabiKartlari.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {metinHesabiKartlari.map((kart) => (
                           <div
-                            key={idx}
-                            className="p-3 rounded-lg border bg-white dark:bg-gray-800 shadow-sm text-xs leading-snug whitespace-pre-line text-gray-800 dark:text-gray-200"
+                            key={kart.key}
+                            className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 shadow-sm text-xs leading-snug whitespace-pre-line text-gray-800 dark:text-gray-200"
                           >
-                            {p.text}
+                            <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-200 mb-2">
+                              {kart.label}
+                            </p>
+                            {kart.text}
                           </div>
                         ))}
                       </div>

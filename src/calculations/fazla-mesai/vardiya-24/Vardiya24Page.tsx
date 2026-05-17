@@ -36,6 +36,13 @@ import { DAMGA_VERGISI_ORANI } from "@/utils/fazlaMesai/tableDisplayPipeline";
 import { calculateIncomeTaxWithBrackets } from "@/utils/incomeTaxCore";
 import { calculate24System } from "../../../utils/fazlaMesai/vardiya24/calculate24System";
 import {
+  exclusionsNeedLegacySplit,
+  expandVardiya24RowsForDeductions,
+  isVardiya24MotorDeductionNote,
+  isVardiya24TransitionDeductionNote,
+  partitionVardiya24Exclusions,
+} from "./expandVardiya24RowsForDeductions";
+import {
   applyResolvedManualBrutToRows,
   clearAllManualBrutFromRowOverrides,
   mergeManualWageBrutsIntoRowOverrides,
@@ -355,6 +362,8 @@ function normalize24RowsFromBaseline(rows: VardiyaRow[], baselineRows: Array<{ s
   });
 
   const periodsWithTransition = new Set<string>();
+  const periodsWithMotorDeduction = new Set<string>();
+
   out.forEach((r) => {
     if (!trRe.test(String(r.yillikIzinAciklama || ""))) return;
     const rs = (r.startISO || "").slice(0, 10);
@@ -369,12 +378,29 @@ function normalize24RowsFromBaseline(rows: VardiyaRow[], baselineRows: Array<{ s
     periodsWithTransition.add(`${(container.startISO || "").slice(0, 10)}|${(container.endISO || "").slice(0, 10)}`);
   });
 
+  out.forEach((r) => {
+    if (!isVardiya24MotorDeductionNote(r.yillikIzinAciklama)) return;
+    const rs = (r.startISO || "").slice(0, 10);
+    const re = (r.endISO || "").slice(0, 10);
+    const wageContainer = out.find((x) => {
+      if (isVardiya24MotorDeductionNote(x.yillikIzinAciklama)) return false;
+      if (isVardiya24TransitionDeductionNote(x.yillikIzinAciklama)) return false;
+      const xs = (x.startISO || "").slice(0, 10);
+      const xe = (x.endISO || "").slice(0, 10);
+      return !!rs && !!re && xs <= rs && re <= xe && (xs !== rs || xe !== re);
+    });
+    if (!wageContainer) return;
+    periodsWithMotorDeduction.add(
+      `${(wageContainer.startISO || "").slice(0, 10)}|${(wageContainer.endISO || "").slice(0, 10)}`,
+    );
+  });
+
   // Önce notsuz ana satırları baseline hafta değerine eşitle.
   out.forEach((r, i) => {
     if (trRe.test(String(r.yillikIzinAciklama || ""))) return;
     const periodKey = `${(r.startISO || "").slice(0, 10)}|${(r.endISO || "").slice(0, 10)}`;
-    // Geçiş bulunan dönemde baseline'a geri yazma: motorun ürettiği ana hafta korunur.
-    if (periodsWithTransition.has(periodKey)) return;
+    // Geçiş veya motor UBGT/yıllık izin düşümü: köprünün düşürdüğü hafta sayısı korunur.
+    if (periodsWithTransition.has(periodKey) || periodsWithMotorDeduction.has(periodKey)) return;
     const weekType = String(parseInt(String(r.weekTypeLabel || "").split(" ")[0] || "0", 10) || 0);
     const bw = baselineMap.get(`${(r.startISO || "").slice(0, 10)}|${(r.endISO || "").slice(0, 10)}|${weekType}`);
     if (bw != null) out[i].weeks = bw;
@@ -675,17 +701,72 @@ export default function Vardiya24Page() {
       if (witnessIntervals.length === 0) {
         witnessIntervals = [{ start: dStart, end: dEnd }];
       }
+
+      const useLegacyDeductionPath = exclusionsNeedLegacySplit(exclusions as ExcludedDay[]);
+      const { motor: motorExclusions, legacy: legacyExclusions } = partitionVardiya24Exclusions(
+        exclusions as ExcludedDay[],
+      );
+
+      const mapSummaryToVardiyaRows = (
+        summary: ReturnType<typeof calculate24System>,
+        idPrefix: string,
+      ): VardiyaRow[] =>
+        summary.map((w, idx) => {
+          const row: VardiyaRow = {
+            id: `${idPrefix}-${idx}-${w.startDate}`,
+            isManual: false,
+            rangeLabel: `${formatDateTR(w.startDate)}–${formatDateTR(w.endDate)}`,
+            weeks: w.weekCount,
+            brut: getAsgariUcretByDate(w.startDate) || 0,
+            katsayi: 1,
+            fmHours: w.weeklyFmHours,
+            calc225: 225,
+            factor: 1.5,
+            fm: 0,
+            net: 0,
+            startISO: w.startDate,
+            endISO: w.endDate,
+            weekTypeLabel: `${w.weekType} gün`,
+            yillikIzinAciklama: w.note,
+          };
+          const { fm, net } = recalcVardiyaRow24(row);
+          return { ...row, fm, net };
+        });
+
       const summaryRows = witnessIntervals.flatMap((seg) => {
         const segAnchor = anchorForSegment(dStart, seg.start, anchorIsWorkDay);
-        return calculate24System({
+        const calcExclusions = useLegacyDeductionPath ? (exclusions as ExcludedDay[]) : legacyExclusions;
+        const baselineSummary = calculate24System({
           startDate: seg.start,
           endDate: seg.end,
-          exclusions: exclusions as ExcludedDay[],
+          exclusions: calcExclusions,
           anchorIsWorkDay: segAnchor,
           anchorStartDate: dStart,
           forceBucketDeductionForAllExclusions: false,
-          mergeUbgtChangedIntoSevenDayEnvelope: true,
+          mergeUbgtChangedIntoSevenDayEnvelope: useLegacyDeductionPath,
         });
+
+        if (useLegacyDeductionPath || motorExclusions.length === 0) {
+          return baselineSummary;
+        }
+
+        const segId = `v24-${seg.start}-${seg.end}`;
+        let segRows = mapSummaryToVardiyaRows(baselineSummary, segId);
+        segRows = expandVardiya24RowsForDeductions(segRows, motorExclusions, {
+          anchorStartDate: dStart,
+          anchorIsWorkDay: segAnchor,
+          segmentStart: seg.start,
+          segmentEnd: seg.end,
+        }) as VardiyaRow[];
+
+        return segRows.map((r) => ({
+          startDate: r.startISO,
+          endDate: r.endISO,
+          weekType: String(parseInt(String(r.weekTypeLabel || "").split(" ")[0] || "0", 10) || 0),
+          weekCount: r.weeks,
+          weeklyFmHours: r.fmHours,
+          note: r.yillikIzinAciklama,
+        }));
       });
       logVardiyaDebug("summaryRowsRaw.24", summaryRows);
       logVardiyaDebug("summaryRowsRaw.24.compact", summarizeCalcRows(summaryRows));
@@ -747,8 +828,7 @@ export default function Vardiya24Page() {
           if (!ps || !pe) return;
 
           const transitionRowsInWindow = nextRows.filter((r) => {
-            const note = String(r.yillikIzinAciklama || "");
-            if (!/\((\d+)\s*->\s*(\d+)\s*gün\)/i.test(note)) return false;
+            if (!isVardiya24TransitionDeductionNote(r.yillikIzinAciklama)) return false;
             const rs = (r.startISO || "").slice(0, 10);
             const re = (r.endISO || "").slice(0, 10);
             return rs >= ps && re <= pe;
@@ -756,14 +836,28 @@ export default function Vardiya24Page() {
           if (transitionRowsInWindow.length > 0) return;
 
           const expectedRoundedWeeks = Math.max(0, Math.round(calculateWeeksBetweenDates(ps, pe)));
-          const currentWeeks = idxs.reduce((acc, i) => acc + Math.max(0, Math.round(Number(nextRows[i].weeks) || 0)), 0);
+          /** Ücret dönemi içindeki tüm satırlar (motor düşüm kısa tarihli satır dahil). */
+          const currentWeeks = nextRows.reduce((acc, r) => {
+            const rs = (r.startISO || "").slice(0, 10);
+            const re = (r.endISO || "").slice(0, 10);
+            if (!rs || !re || rs < ps || re > pe) return acc;
+            const isWageSpanRow = rs === ps && re === pe;
+            const isMotorDedInside =
+              isVardiya24MotorDeductionNote(r.yillikIzinAciklama) && rs >= ps && re <= pe;
+            if (!isWageSpanRow && !isMotorDedInside) return acc;
+            return acc + Math.max(0, Math.round(Number(r.weeks) || 0));
+          }, 0);
+
           let deltaWeeks = expectedRoundedWeeks - currentWeeks;
           if (deltaWeeks === 0) return;
 
+          const normalAdjustableIdxs = idxs.filter((i) => !isVardiya24MotorDeductionNote(nextRows[i].yillikIzinAciklama));
+          if (!normalAdjustableIdxs.length) return;
+
           while (deltaWeeks > 0) {
-            let targetIdx = idxs[0];
-            for (let k = 1; k < idxs.length; k += 1) {
-              const i = idxs[k];
+            let targetIdx = normalAdjustableIdxs[0];
+            for (let k = 1; k < normalAdjustableIdxs.length; k += 1) {
+              const i = normalAdjustableIdxs[k];
               const w = Number(nextRows[i].weeks) || 0;
               const t = Number(nextRows[targetIdx].weeks) || 0;
               if (w < t) targetIdx = i;
@@ -774,8 +868,8 @@ export default function Vardiya24Page() {
 
           while (deltaWeeks < 0) {
             let targetIdx = -1;
-            for (let k = 0; k < idxs.length; k += 1) {
-              const i = idxs[k];
+            for (let k = 0; k < normalAdjustableIdxs.length; k += 1) {
+              const i = normalAdjustableIdxs[k];
               const w = Number(nextRows[i].weeks) || 0;
               if (w <= 0) continue;
               if (targetIdx < 0 || w > (Number(nextRows[targetIdx].weeks) || 0)) targetIdx = i;
@@ -1229,29 +1323,6 @@ export default function Vardiya24Page() {
               </details>
             </section>
 
-            <section className="rounded-xl border border-gray-200 dark:border-gray-600 p-4 sm:p-5 bg-gray-50/50 dark:bg-gray-900/30 shadow-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => (zamanasimiBaslangic ? handleZamanasimiIptal() : setShowZamanaModal(true))}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border ${
-                    zamanasimiBaslangic ? "bg-blue-600 text-white border-blue-600" : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
-                  }`}
-                >
-                  {zamanasimiBaslangic ? "Zamanaşımı" : "Zamanaşımı itirazı"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => (hasCustomKatsayi ? handleFormChange({ katSayi: 1 }) : setShowKatsayiModal(true))}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border ${
-                    hasCustomKatsayi ? "bg-emerald-600 text-white border-emerald-600" : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
-                  }`}
-                >
-                  {hasCustomKatsayi ? `Katsayı ${katSayi?.toFixed(2)}` : "Kat sayı"}
-                </button>
-              </div>
-            </section>
-
             <div className="space-y-3">
               <YillikIzinPanel exclusions={exclusions} setExclusions={setExclusions} success={success} showToastError={showToastError} />
               <UbgtFmDayPicker
@@ -1280,6 +1351,34 @@ export default function Vardiya24Page() {
                 success={success}
                 error={showToastError}
               />
+              <div className="px-4 py-2.5 sm:py-3 border-t border-b border-gray-200 dark:border-gray-600 bg-gray-50/90 dark:bg-gray-900/40">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => (zamanasimiBaslangic ? handleZamanasimiIptal() : setShowZamanaModal(true))}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                      zamanasimiBaslangic
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500"
+                    }`}
+                    title={zamanasimiBaslangic ? "Zamanaşımını kaldır" : "Zamanaşımı hesapla"}
+                  >
+                    {zamanasimiBaslangic ? "Zamanaşımı" : "Zamanaşımı Hesabı"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => (hasCustomKatsayi ? handleFormChange({ katSayi: 1 }) : setShowKatsayiModal(true))}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                      hasCustomKatsayi
+                        ? "bg-emerald-600 text-white border-emerald-600"
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:border-emerald-400 dark:hover:border-emerald-500"
+                    }`}
+                    title={hasCustomKatsayi ? "Katsayıyı kaldır" : "Katsayı hesapla"}
+                  >
+                    {hasCustomKatsayi ? `Katsayı ${katSayi?.toFixed(2) || "1"}` : "Kat Sayı"}
+                  </button>
+                </div>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs border-collapse text-gray-900 dark:text-gray-100">
                   <thead>

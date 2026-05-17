@@ -30,13 +30,19 @@ import type { PatternDay, HaftalikKarmaWitness, HaftalikKarmaState, WitnessDayGr
 import WeeklyPatternEditor from "./WeeklyPatternEditor";
 import {
   calculateWeeklyFMFromDayGroups,
+  calculateWeeklyKarmaDeductionFmHours,
   generateWeeklyText,
   representativeDailyNetFromDayGroups,
   fallbackDailyNetFromWeeklyFm,
   witnessWeeklyHolidayFromPlaintiffClaim,
+  resolveWeeklyKarmaFmContextForDate,
   sumRegisteredWorkDays,
+  type WeeklyKarmaFmContext,
 } from "./utils";
-import { splitByExclusions } from "@/modules/tanikli-standart/rules/splitByExclusions.rule";
+import {
+  expandHaftalikKarmaRowsForDeductions,
+  exclusionsNeedLegacySplit,
+} from "./expandHaftalikKarmaRowsForDeductions";
 import {
   calculateFm,
   calculateRowMoney,
@@ -370,6 +376,32 @@ export default function HaftalikKarmaPage() {
     // Tanıklar: TanikliStandartPage ile aynı mantık —
     //   1) hem tarih hem gün grubu zorunlu
     //   2) tanık saatleri davacı saatiyle kısıtlanır (Math.max giriş, Math.min çıkış)
+    const davaciFmContext: WeeklyKarmaFmContext = {
+      dayGroups: davaciGroups,
+      hasWeeklyHoliday: hasHoliday,
+      weeklyHolidayGroup: holidayGroup,
+    };
+
+    const witnessFmProfiles = haftalikKarmaState.witnesses
+      .filter((w) => w.startDateISO && w.endDateISO)
+      .map((w) => {
+        const rawGroups = w.dayGroups?.length ? w.dayGroups : davaciGroups;
+        const clampedGroups = clampWitnessGroupsByIndex(rawGroups, davaciGroups);
+        const wHt = witnessWeeklyHolidayFromPlaintiffClaim({
+          davaciDayGroups: davaciGroups,
+          davaciHasWeeklyHoliday: hasHoliday,
+          davaciWeeklyHolidayGroup: holidayGroup,
+          witnessDayGroups: clampedGroups,
+        });
+        return {
+          startDateISO: w.startDateISO,
+          endDateISO: w.endDateISO,
+          dayGroups: clampedGroups,
+          hasWeeklyHoliday: wHt.hasWeeklyHoliday,
+          weeklyHolidayGroup: wHt.weeklyHolidayGroup,
+        };
+      });
+
     const validWitnesses = haftalikKarmaState.witnesses
       .filter((w) => {
         if (!w.startDateISO || !w.endDateISO) return false;
@@ -491,6 +523,12 @@ export default function HaftalikKarmaPage() {
         const weeks = Math.max(0, calculateWeeksBetweenDates(period.start, period.end));
         const brut = getAsgariUcretByDate(period.start) || 0;
 
+        const karmaFmContext = resolveWeeklyKarmaFmContextForDate(
+          period.start,
+          witnessFmProfiles,
+          davaciFmContext,
+        );
+
         generatedRows.push({
           id: `row-${period.start}-${period.end}-${segIdx}-${periodIdx}`,
           startISO: period.start,
@@ -504,6 +542,7 @@ export default function HaftalikKarmaPage() {
           dailyNet: seg.dailyNet,
           annualLeaveHg: seg.annualLeaveHg,
           annualLeaveSevenDay: seg.annualLeaveSevenDay,
+          karmaFmContext,
         });
       });
     });
@@ -518,10 +557,29 @@ export default function HaftalikKarmaPage() {
       0
     );
 
-    let pipeline = splitByExclusions(generatedRows as FazlaMesaiRowBase[], exclusions, {
+    let pipeline = expandHaftalikKarmaRowsForDeductions({
+      rows: generatedRows as FazlaMesaiRowBase[],
+      exclusions,
       weeklyOffDay,
     });
     pipeline = pipeline.map((r) => calculateFm(r as TanikliRowWithSegmentFields));
+
+    if (exclusions.length > 0 && !exclusionsNeedLegacySplit(exclusions)) {
+      pipeline = pipeline.map((r) => {
+        const row = r as TanikliRowWithSegmentFields & {
+          isExclusionBlock?: boolean;
+          karmaFmContext?: WeeklyKarmaFmContext;
+          karmaDeductionDates?: Array<{ dateISO: string; dayWeight: number }>;
+        };
+        if (!row.isExclusionBlock || !row.karmaFmContext) return r;
+        const fmHours = calculateWeeklyKarmaDeductionFmHours({
+          context: row.karmaFmContext,
+          deductionDates: row.karmaDeductionDates ?? [],
+        });
+        return { ...r, fmHours };
+      });
+    }
+
     pipeline = preserveWeeks(pipeline, originalTotalWeeks);
     pipeline = pipeline.map((r) => calculateRowMoney(r, kats));
 

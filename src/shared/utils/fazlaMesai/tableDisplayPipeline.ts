@@ -117,6 +117,9 @@ function computeRowOvertimeHours(row: FazlaMesaiRowBase): number {
  * - 7 günden kısa (parçalı) satırlarda gün bazlı FM hesaplanır.
  */
 function resolveRowFmHours(row: FazlaMesaiRowBase): number {
+  if ((row as { yillikIzinAciklama?: string }).yillikIzinAciklama) {
+    return Math.max(0, Number(row.fmHours) || 0);
+  }
   const totalDays = Math.max(0, Number(row.totalDays) || inclusiveDayCount(row.startISO, row.endISO));
   if (totalDays > 0 && totalDays < 7) {
     return computeRowOvertimeHours(row);
