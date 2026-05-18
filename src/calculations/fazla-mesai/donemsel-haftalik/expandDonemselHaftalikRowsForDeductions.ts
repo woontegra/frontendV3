@@ -12,6 +12,7 @@ import {
   parseFmDate,
   type FmPeriodSegment,
 } from "@/shared/utils/fazlaMesai/deductionPeriodEngine";
+import { filterExclusionsForWeeklyOff } from "@/shared/utils/fazlaMesai/weeklyOffExclusionFilter";
 import { splitByExclusions } from "@/modules/tanikli-standart/rules/splitByExclusions.rule";
 import { countWeeksBySevenDaySteps } from "@/modules/tanikli-standart/rules/preserveWeeks.rule";
 import type { TanikliRowWithSegmentFields } from "@/modules/tanikli-standart/rules/calculateFm.rule";
@@ -320,9 +321,11 @@ export function expandDonemselHaftalikRowsForDeductions(
     return enrichRowsWithoutDeductions(rows, weeklyOffDay);
   }
 
+  const exclusionsForMotor = filterExclusionsForWeeklyOff(exclusions, weeklyOffDay);
+
   if (exclusionsNeedLegacySplit(exclusions)) {
-    return splitByExclusions(rows, exclusions, { weeklyOffDay });
+    return splitByExclusions(rows, exclusionsForMotor, { weeklyOffDay });
   }
 
-  return expandWithMotor(rows, exclusions, weeklyOffDay, seasonalDeductionContext);
+  return expandWithMotor(rows, exclusionsForMotor, weeklyOffDay, seasonalDeductionContext);
 }

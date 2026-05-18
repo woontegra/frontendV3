@@ -105,6 +105,10 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
     }
   };
 
+  const handleMenuNavigate = () => {
+    setOpen(false);
+  };
+
   const handleMouseLeave = () => {
     if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = window.setTimeout(() => setOpen(false), 1000) as unknown as number;
@@ -227,9 +231,10 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
 
           {/* Menu Items */}
           <div className="py-2">
-            <DropdownMenuItem asChild>
+            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
               <Link
                 to="/profile"
+                onClick={handleMenuNavigate}
                 className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
               >
                 <User className="h-4 w-4 text-gray-500 dark:text-gray-400" />
@@ -237,9 +242,10 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
               </Link>
             </DropdownMenuItem>
 
-            <DropdownMenuItem asChild>
+            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
               <Link
                 to="/profile?tab=saved"
+                onClick={handleMenuNavigate}
                 className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
               >
                 <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400" />
@@ -247,9 +253,10 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
               </Link>
             </DropdownMenuItem>
 
-            <DropdownMenuItem asChild>
+            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
               <Link
                 to="/profile?tab=subscription"
+                onClick={handleMenuNavigate}
                 className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
               >
                 <CreditCard className="h-4 w-4 text-gray-500 dark:text-gray-400" />
@@ -257,9 +264,10 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
               </Link>
             </DropdownMenuItem>
 
-            <DropdownMenuItem asChild>
+            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
               <Link
                 to="/profile"
+                onClick={handleMenuNavigate}
                 className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
               >
                 <Settings className="h-4 w-4 text-gray-500 dark:text-gray-400" />

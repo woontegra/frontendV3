@@ -14,6 +14,7 @@ import {
 } from "@/shared/utils/fazlaMesai/deductionPeriodEngine";
 import { splitByExclusions } from "@/modules/tanikli-standart/rules/splitByExclusions.rule";
 import { countWeeksBySevenDaySteps } from "@/modules/tanikli-standart/rules/preserveWeeks.rule";
+import { filterExclusionsForWeeklyOff } from "@/shared/utils/fazlaMesai/weeklyOffExclusionFilter";
 
 /** splitByExclusions tarafından işlenen; motorun işlemediği tipler → eski yol. */
 const LEGACY_ONLY_EXCLUSION_TYPES = new Set(["Rapor", "Diğer", "Puantaj/Bordro"]);
@@ -149,7 +150,7 @@ function mapDeductionSegmentToRow(
 
 function expandWithMotor(
   rows: FazlaMesaiRowBase[],
-  exclusions: ExcludedDay[],
+  exclusionsForMotor: ExcludedDay[],
   weeklyOffDay: number | null,
 ): FazlaMesaiRowBase[] {
   const out: FazlaMesaiRowBase[] = [];
@@ -166,7 +167,7 @@ function expandWithMotor(
     const periodResult = buildDeductionPeriodsForFm({
       periodStart: startISO,
       periodEnd: endISO,
-      exclusions,
+      exclusions: exclusionsForMotor,
     });
 
     const deductionSegments = periodResult.segments.filter((s) => s.containsDeduction);
@@ -213,9 +214,11 @@ export function expandTanikliRowsForDeductions(
     return enrichRowsWithoutDeductions(rows, weeklyOffDay);
   }
 
+  const exclusionsForDeduction = filterExclusionsForWeeklyOff(exclusions, weeklyOffDay);
+
   if (exclusionsNeedLegacySplit(exclusions)) {
-    return splitByExclusions(rows, exclusions, { weeklyOffDay });
+    return splitByExclusions(rows, exclusionsForDeduction, { weeklyOffDay });
   }
 
-  return expandWithMotor(rows, exclusions, weeklyOffDay);
+  return expandWithMotor(rows, exclusionsForDeduction, weeklyOffDay);
 }

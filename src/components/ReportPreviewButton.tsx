@@ -195,7 +195,7 @@ export default function ReportPreviewButton({ title, renderContent, buttonClassN
         </button>
       )}
       {open && hasContent && createPortal(
-        <div className="fixed inset-0 z-[1000] bg-black/40" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-[1000] bg-black/40" role="dialog" aria-modal="true" onClick={closeModal}>
           <div
             ref={modalRef}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-lg shadow-gray-200/50 dark:shadow-gray-900/50 border-2 border-gray-300 dark:border-gray-600 overflow-hidden"

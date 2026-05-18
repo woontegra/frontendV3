@@ -11,6 +11,7 @@ import {
   buildDeductionPeriodsForFm,
   type FmPeriodSegment,
 } from "@/shared/utils/fazlaMesai/deductionPeriodEngine";
+import { filterExclusionsForWeeklyOff } from "@/shared/utils/fazlaMesai/weeklyOffExclusionFilter";
 import { resolveStoredManualBrutForStartISO } from "@/shared/utils/fazlaMesai/fmManualWageRowOverrides";
 import { bilirkisiRoundWeeklyTotalHours } from "./annualLeaveSixDayRowSplit";
 import {
@@ -197,9 +198,11 @@ function mapDeductionSegmentToRow(
 export function expandStandartRowsForDeductions(
   params: ExpandStandartRowsForDeductionsParams,
 ): FazlaMesaiRowBase[] {
-  const { rows, exclusions, dailyNet } = params;
+  const { rows, exclusions, dailyNet, weeklyOffDay } = params;
   if (!rows.length) return rows;
   if (!exclusions?.length || dailyNet <= 0) return rows;
+
+  const exclusionsForMotor = filterExclusionsForWeeklyOff(exclusions, weeklyOffDay ?? null);
 
   const out: FazlaMesaiRowBase[] = [];
 
@@ -215,7 +218,7 @@ export function expandStandartRowsForDeductions(
     const periodResult = buildDeductionPeriodsForFm({
       periodStart: startISO,
       periodEnd: endISO,
-      exclusions,
+      exclusions: exclusionsForMotor,
     });
 
     const deductionSegments = periodResult.segments.filter((s) => s.containsDeduction);

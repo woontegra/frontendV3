@@ -11,6 +11,7 @@ import {
   parseFmDate,
   type FmPeriodSegment,
 } from "@/shared/utils/fazlaMesai/deductionPeriodEngine";
+import { filterExclusionsForWeeklyOff } from "@/shared/utils/fazlaMesai/weeklyOffExclusionFilter";
 import { splitByExclusions } from "@/modules/tanikli-standart/rules/splitByExclusions.rule";
 import { countWeeksBySevenDaySteps } from "@/modules/tanikli-standart/rules/preserveWeeks.rule";
 import type { YeraltiExpandSourceRow } from "./yeraltiAnnualLeaveUbgtExpand";
@@ -336,11 +337,13 @@ export function expandYeraltiRowsForDeductions(
     return enrichRowsWithoutDeductions(rows, weeklyOffDay);
   }
 
+  const exclusionsForMotor = filterExclusionsForWeeklyOff(exclusions, weeklyOffDay);
+
   if (exclusionsNeedLegacySplit(exclusions)) {
     if (!fmParams) {
-      return expandWithMotor(rows, exclusions, weeklyOffDay, undefined);
+      return expandWithMotor(rows, exclusionsForMotor, weeklyOffDay, undefined);
     }
-    return expandYeraltiRowsForExclusions(rows, exclusions, {
+    return expandYeraltiRowsForExclusions(rows, exclusionsForMotor, {
       dailyNet: fmParams.dailyNet,
       hg: fmParams.hg,
       weeklyOffDay: fmParams.weeklyOffDay,
@@ -349,5 +352,5 @@ export function expandYeraltiRowsForDeductions(
     });
   }
 
-  return expandWithMotor(rows, exclusions, weeklyOffDay, fmParams);
+  return expandWithMotor(rows, exclusionsForMotor, weeklyOffDay, fmParams);
 }

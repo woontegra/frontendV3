@@ -78,9 +78,7 @@ function materializeAnchors(exclusions: ExcludedDay[], weeklyOff: number | null)
     let cur = new Date(s);
     while (cur <= e) {
       if (cap != null && used >= cap) break;
-      const isUbgt = String(ex.type || "").trim() === "UBGT";
-      // Tanıklı Standart kuralı: UBGT seçilen gün, hafta tatiline denk gelse de dışlama anchor'ıdır.
-      if (isUbgt || isWorkDay(cur, weeklyOff)) {
+      if (isWorkDay(cur, weeklyOff)) {
         out.push(startOfDay(cur));
         if (cap != null) used += 1;
       }
