@@ -68,6 +68,19 @@ const REDIRECT_BASE_PATH = "/fazla-mesai/standart";
 const SSK_ORAN = 0.14;
 const ISSIZLIK_ORAN = 0.01;
 
+function rowOverridesShallowEqual(
+  a: Record<string, Partial<FazlaMesaiRowBase>>,
+  b: Record<string, Partial<FazlaMesaiRowBase>>,
+): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) {
+    if (JSON.stringify(a[key]) !== JSON.stringify(b[key])) return false;
+  }
+  return true;
+}
+
 /** ISO tarih (yyyy-mm-dd) → gg.aa.yyyy */
 function formatDateTR(iso: string | undefined): string {
   if (!iso) return "";
@@ -451,7 +464,10 @@ export default function StandartFazlaMesaiPage() {
     if (!baseRows.length) {
       return;
     }
-    setRowOverrides((prev) => applyStoredManualBrutOverridesToRows(prev, baseRows));
+    setRowOverrides((prev) => {
+      const next = applyStoredManualBrutOverridesToRows(prev, baseRows);
+      return rowOverridesShallowEqual(prev, next) ? prev : next;
+    });
   }, [rows, manualRows, setRowOverrides]);
 
   /** Hafta, FM saati veya fazla mesai tutarı 0 olan otomatik satırlar cetvelde gösterilmez. */

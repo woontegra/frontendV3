@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from "react";
 import { ChevronRight, LayoutDashboard, Menu, Shield, Wrench } from "lucide-react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 import { calculationModules, type CalculationModuleRoute } from "@/calculations/registry";
 import GlobalCalculationTools from "@/components/GlobalCalculationTools";
 import StarterWelcomeModal from "@/components/StarterWelcomeModal";
@@ -57,7 +57,6 @@ function readIsAdmin(): boolean {
 }
 
 export default function AppShell() {
-  const location = useLocation();
   const { open: starterWelcomeOpen, onClose: onStarterWelcomeClose } = useDemoStarterWelcome();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem("sidebarCollapsed") === "true",
@@ -185,7 +184,7 @@ export default function AppShell() {
 
         <main className={styles.main}>
           <AppBreadcrumb />
-          <Outlet key={`${location.pathname}${location.search}`} />
+          <Outlet />
         </main>
       </div>
       <GlobalCalculationTools />

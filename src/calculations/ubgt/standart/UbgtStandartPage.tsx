@@ -287,6 +287,19 @@ function ubgtRowToFmStub(row: UbgtTableRow): FazlaMesaiRowBase {
   };
 }
 
+function rowOverridesShallowEqual(
+  a: Record<string, Partial<FazlaMesaiRowBase>>,
+  b: Record<string, Partial<FazlaMesaiRowBase>>,
+): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) {
+    if (JSON.stringify(a[key]) !== JSON.stringify(b[key])) return false;
+  }
+  return true;
+}
+
 const WEEKDAYS: { index: number; label: string }[] = [
   { index: 0, label: "Pazar" },
   { index: 1, label: "Pazartesi" },
@@ -636,7 +649,10 @@ export default function UbgtStandartPage() {
 
   useEffect(() => {
     if (!fmStubs.length) return;
-    setRowOverrides((prev) => applyStoredManualBrutOverridesToRows(prev, fmStubs));
+    setRowOverrides((prev) => {
+      const next = applyStoredManualBrutOverridesToRows(prev, fmStubs);
+      return rowOverridesShallowEqual(prev, next) ? prev : next;
+    });
   }, [fmStubs]);
 
   const resolvedFmRows = useMemo(
