@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,6 +30,7 @@ import {
   BarChart3,
   ShieldCheck,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import DeviceManagerModal from "@/components/modals/DeviceManagerModal";
@@ -111,6 +112,7 @@ const fmtDateTime = (d?: string | null) => (d ? new Date(d).toLocaleString("tr-T
 
 export default function AdminUserDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { success, error: toastError } = useToast();
   const [data, setData] = useState<UserDetailData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,7 +120,7 @@ export default function AdminUserDetailPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("genel");
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
-  const [confirmType, setConfirmType] = useState<null | "demo3" | "status" | "trial" | "subscription" | "convertPro">(null);
+  const [confirmType, setConfirmType] = useState<null | "demo3" | "status" | "trial" | "subscription" | "convertPro" | "delete">(null);
   const [trialDays, setTrialDays] = useState("3");
   const [extendDays, setExtendDays] = useState("30");
   const [convertProType, setConvertProType] = useState<"professional_monthly" | "professional_annual">("professional_monthly");
@@ -141,6 +143,21 @@ export default function AdminUserDetailPage() {
     const parsed = Number(id);
     return Number.isInteger(parsed) && parsed > 0 ? String(parsed) : null;
   }, [id]);
+
+  const currentAdminId = useMemo(() => {
+    try {
+      const raw = localStorage.getItem("current_user");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { id?: number; userId?: number };
+        const fromUser = Number(parsed?.id ?? parsed?.userId);
+        if (Number.isInteger(fromUser) && fromUser > 0) return fromUser;
+      }
+    } catch {
+      /* ignore */
+    }
+    const fromStorage = Number(localStorage.getItem("user_id") || "0");
+    return Number.isInteger(fromStorage) && fromStorage > 0 ? fromStorage : null;
+  }, []);
 
   const load = async () => {
     if (!id) return;
@@ -204,6 +221,7 @@ export default function AdminUserDetailPage() {
   const usage = data?.usageStats ?? { totalCalculations: 0, last30DaysCalculations: 0, mostUsedModule: null, lastCalculationDate: null };
   const login = data?.loginStats ?? { totalLogins: 0, lastLoginDate: null, lastLoginIP: null };
   const user = data?.user;
+  const isCurrentAdminUser = currentAdminId != null && user?.id === currentAdminId;
   const license = data?.license;
   const tickets = data?.tickets ?? [];
   const ipLoginHistory = data?.ipLoginHistory ?? [];
@@ -234,7 +252,7 @@ export default function AdminUserDetailPage() {
     if (totalLogins > 0 && totalCalcs === 0) {
       reasons.push("Giriş yaptı ancak hesaplama yapmadı");
     }
-    if (isDemoUser && remainingDays != null && remainingDays > 0 && remainingDays <= 3) {
+    if (isDemoUser && remainingDays != null && remainingDays > 0 && remainingDays <= 2) {
       reasons.push(`Demo süresi ${remainingDays} gün içinde bitiyor`);
     }
     if (isDemoUser && (remainingDays != null && remainingDays <= 0)) {
@@ -510,9 +528,9 @@ export default function AdminUserDetailPage() {
         body: JSON.stringify({ days }),
       });
       const body = await res.json().catch(() => null);
-      const newTrialEnd = body?.trialEndsAt ? String(body.trialEndsAt) : null;
-      if (!res.ok || !newTrialEnd) throw new Error("Trial eklenemedi");
-      success(`Trial süresi eklendi: yeni deneme bitişi ${fmtDate(newTrialEnd)}`);
+      const newTrialEnd = body?.subscriptionEndsAt || body?.trialEndsAt;
+      if (!res.ok || !newTrialEnd) throw new Error(body?.error || "Trial eklenemedi");
+      success(`Trial süresi eklendi: yeni bitiş ${fmtDate(String(newTrialEnd))}`);
       await load();
     } catch {
       toastError("İşlem başarısız", "Trial gün eklenemedi");
@@ -561,6 +579,31 @@ export default function AdminUserDetailPage() {
     setConvertProType("professional_monthly");
     setConvertProEndDate(addDaysFromToday(30));
     setConfirmType("convertPro");
+  };
+
+  const runDeleteUser = async () => {
+    if (!id || !user) return;
+    if (isCurrentAdminUser) {
+      toastError("İşlem engellendi", "Kendi hesabınızı bu ekrandan silemezsiniz");
+      setConfirmType(null);
+      return;
+    }
+    setActionBusy("delete");
+    try {
+      const res = await apiClient(`/api/admin/users/${id}`, {
+        method: "DELETE",
+        headers: { "x-user-role": "admin" },
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || body?.message || "Kullanıcı silinemedi");
+      success("Kullanıcı silindi");
+      navigate("/admin/users");
+    } catch (e) {
+      toastError("Silme başarısız", e instanceof Error ? e.message : "Kullanıcı silinemedi");
+    } finally {
+      setActionBusy(null);
+      setConfirmType(null);
+    }
   };
 
   const runConvertToProfessional = async () => {
@@ -753,6 +796,17 @@ export default function AdminUserDetailPage() {
           <Button size="sm" variant="outline" className="border-rose-200 text-rose-600" onClick={() => setConfirmType("status")} disabled={actionBusy != null}>
             {user.status === "suspended" ? "Aktife Al" : "Pasife Al"}
           </Button>
+          {!isCurrentAdminUser && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setConfirmType("delete")}
+              disabled={actionBusy != null}
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              Kullanıcıyı Sil
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -1044,8 +1098,11 @@ export default function AdminUserDetailPage() {
       <Dialog open={confirmType === "trial"} onOpenChange={(o) => !o && setConfirmType(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Trial Gün Ekle</DialogTitle>
-            <DialogDescription>Mevcut endpoint ile kullanıcıya trial günü eklenir.</DialogDescription>
+            <DialogTitle>Trial Süresi Ekle</DialogTitle>
+            <DialogDescription>
+              Girilen gün sayısı mevcut demo/trial bitiş tarihine eklenir. Bitiş geçmişteyse bugünden itibaren eklenir;
+              abonelik ve demo lisans bitişi birlikte güncellenir.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="trial-days">Gün</Label>
@@ -1055,6 +1112,30 @@ export default function AdminUserDetailPage() {
             <Button variant="outline" size="sm" onClick={() => setConfirmType(null)} disabled={actionBusy === "trial"}>İptal</Button>
             <Button size="sm" onClick={runAddTrial} disabled={actionBusy === "trial"}>
               {actionBusy === "trial" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Onayla"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmType === "delete"} onOpenChange={(o) => !o && setConfirmType(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-rose-600">Kullanıcıyı Sil</DialogTitle>
+            <DialogDescription>
+              Bu kullanıcı silinecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?
+            </DialogDescription>
+          </DialogHeader>
+          {user && (
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              {user.name} ({user.email})
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setConfirmType(null)} disabled={actionBusy === "delete"}>
+              İptal
+            </Button>
+            <Button variant="destructive" size="sm" onClick={runDeleteUser} disabled={actionBusy === "delete"}>
+              {actionBusy === "delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Evet, Sil"}
             </Button>
           </DialogFooter>
         </DialogContent>
