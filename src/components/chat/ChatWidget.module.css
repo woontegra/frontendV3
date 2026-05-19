@@ -1,33 +1,116 @@
-/* Floating launcher — always visible when mounted (not gated by presence) */
-.launcher {
+/* Hesaplama footer barının üstünde (DesktopActionBar ~5.75rem) */
+.root {
   position: fixed;
-  bottom: 1.25rem;
-  right: 1rem;
-  z-index: 9990;
+  right: 24px;
+  bottom: 96px;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.root > * {
+  pointer-events: auto;
+}
+
+/* Küçük minimize ikonu */
+.miniFab {
+  position: relative;
+  width: 3rem;
+  height: 3rem;
+  border: none;
+  border-radius: 999px;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  min-width: 11.5rem;
-  max-width: calc(100vw - 2rem);
-  padding: 0.7rem 0.95rem;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  box-shadow:
+    0 10px 24px rgba(15, 23, 42, 0.2),
+    0 2px 6px rgba(15, 23, 42, 0.1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.miniFab:hover {
+  transform: translateY(-2px) scale(1.03);
+}
+
+.miniFabOnline {
+  background: linear-gradient(145deg, #059669, #047857);
+}
+
+.miniFabOffline {
+  background: linear-gradient(145deg, #4f46e5, #3730a3);
+}
+
+.miniFabIcon {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.miniFabPulse {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  border: 2px solid #fff;
+}
+
+.launcherCard {
+  position: relative;
+  max-width: 13.5rem;
+  border-radius: 0.9rem;
   border: 1px solid transparent;
-  border-radius: 1rem;
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.16),
+    0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+.hideChip {
+  position: absolute;
+  top: -0.45rem;
+  right: -0.35rem;
+  z-index: 2;
+  border: none;
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  background: rgba(15, 23, 42, 0.82);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+}
+
+.hideChip:hover {
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.launcher {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: none;
+  border-radius: 0.9rem;
   text-align: left;
   cursor: pointer;
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
-  box-shadow:
-    0 12px 32px rgba(15, 23, 42, 0.18),
-    0 2px 8px rgba(15, 23, 42, 0.08);
+  background: transparent;
+  color: inherit;
+  transition: transform 0.15s ease;
 }
 
 .launcher:hover {
-  transform: translateY(-3px);
+  transform: translateY(-1px);
 }
 
 .launcher:active {
-  transform: translateY(-1px) scale(0.99);
+  transform: scale(0.99);
 }
 
 .launcherOnline {
@@ -131,15 +214,15 @@
   opacity: 0.85;
 }
 
-/* Panel */
+/* Panel — footer üstünde hizalı */
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: 45;
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  padding: 1rem;
+  padding: 0 24px 96px;
   pointer-events: none;
 }
 
@@ -259,6 +342,28 @@
 
 .statusDotOffline {
   background: #fbbf24;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.minimizeBtn {
+  border: none;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.minimizeBtn:hover {
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .closeBtn {
@@ -582,28 +687,40 @@
   color: #f1f5f9;
 }
 
-@media (max-width: 480px) {
-  .launcher {
-    bottom: 0.85rem;
-    right: 0.65rem;
-    min-width: 0;
-    max-width: calc(100vw - 1.25rem);
-    padding: 0.6rem 0.75rem;
-  }
-
-  .launcherTitle {
-    font-size: 0.78rem;
+@media (max-width: 1023px) {
+  .root {
+    right: 16px;
+    bottom: 84px;
   }
 
   .overlay {
-    padding: 0;
+    padding: 0 16px 84px;
+  }
+
+  .launcherCard {
+    max-width: 12.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .launcherTitle {
+    font-size: 0.76rem;
+  }
+
+  .launcherTag {
+    font-size: 0.64rem;
+  }
+
+  .overlay {
+    padding: 0 0 84px;
     align-items: flex-end;
   }
 
   .panel {
     max-width: 100%;
-    height: min(92vh, 100%);
-    max-height: none;
-    border-radius: 1.1rem 1.1rem 0 0;
+    width: 100%;
+    height: min(72vh, calc(100vh - 84px - 1rem));
+    max-height: calc(100vh - 84px - 1rem);
+    border-radius: 1rem 1rem 0 0;
   }
 }

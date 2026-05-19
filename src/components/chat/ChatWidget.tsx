@@ -6,6 +6,15 @@ import { isAdminRole } from "@/shared/utils/profilePicture";
 import styles from "./ChatWidget.module.css";
 
 const POLL_INTERVAL = 5000;
+const MINIMIZED_STORAGE_KEY = "chatWidgetMinimized";
+
+function readMinimizedFromStorage(): boolean {
+  try {
+    return localStorage.getItem(MINIMIZED_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
 
 const OFFLINE_TOPICS = [
   "Demo hesabım hakkında bilgi almak istiyorum",
@@ -72,6 +81,7 @@ export default function ChatWidget() {
   const access = useMemo(() => computeWidgetAccess(), [authTick]);
 
   const [open, setOpen] = useState(false);
+  const [minimized, setMinimized] = useState(readMinimizedFromStorage);
   const [presenceMode, setPresenceMode] = useState<PresenceMode>("loading");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -321,33 +331,69 @@ export default function ChatWidget() {
 
   const imgUrl = (url: string) => (url.startsWith("http") ? url : `${API_BASE_URL}${url}`);
 
+  const persistMinimized = (value: boolean) => {
+    setMinimized(value);
+    try {
+      localStorage.setItem(MINIMIZED_STORAGE_KEY, String(value));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleMinimize = () => {
+    setOpen(false);
+    persistMinimized(true);
+  };
+
   if (!access.show || !token) {
     return null;
   }
 
   return (
-    <>
-      {!open && (
+    <div className={styles.root}>
+      {!open && minimized && (
         <button
           type="button"
-          onClick={() => {
-            setOpen(true);
-            setOfflineSubmitState("idle");
-          }}
-          className={`${styles.launcher} ${launcherCopy.variant === "online" ? styles.launcherOnline : styles.launcherOffline}`}
-          aria-label={launcherCopy.title}
+          className={`${styles.miniFab} ${launcherCopy.variant === "online" ? styles.miniFabOnline : styles.miniFabOffline}`}
+          aria-label="Destek widgetını aç"
+          onClick={() => persistMinimized(false)}
         >
-          <span className={styles.launcherIconWrap} aria-hidden>
-            <MessageSquare className={styles.launcherIcon} />
-            <span
-              className={`${styles.launcherPulse} ${launcherCopy.variant === "online" ? styles.launcherPulseOnline : styles.launcherPulseOffline}`}
-            />
-          </span>
-          <span className={styles.launcherText}>
-            <span className={styles.launcherTitle}>{launcherCopy.title}</span>
-            <span className={styles.launcherTag}>{launcherCopy.tag}</span>
-          </span>
+          <MessageSquare className={styles.miniFabIcon} aria-hidden />
+          <span
+            className={`${styles.miniFabPulse} ${launcherCopy.variant === "online" ? styles.launcherPulseOnline : styles.launcherPulseOffline}`}
+            aria-hidden
+          />
         </button>
+      )}
+
+      {!open && !minimized && (
+        <div
+          className={`${styles.launcherCard} ${launcherCopy.variant === "online" ? styles.launcherOnline : styles.launcherOffline}`}
+        >
+          <button type="button" className={styles.hideChip} aria-label="Gizle" onClick={handleMinimize}>
+            Gizle
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(true);
+              setOfflineSubmitState("idle");
+            }}
+            className={styles.launcher}
+            aria-label={launcherCopy.title}
+          >
+            <span className={styles.launcherIconWrap} aria-hidden>
+              <MessageSquare className={styles.launcherIcon} />
+              <span
+                className={`${styles.launcherPulse} ${launcherCopy.variant === "online" ? styles.launcherPulseOnline : styles.launcherPulseOffline}`}
+              />
+            </span>
+            <span className={styles.launcherText}>
+              <span className={styles.launcherTitle}>{launcherCopy.title}</span>
+              <span className={styles.launcherTag}>{launcherCopy.tag}</span>
+            </span>
+          </button>
+        </div>
       )}
 
       {open && (
@@ -375,9 +421,14 @@ export default function ChatWidget() {
                   </span>
                 </div>
               </div>
-              <button type="button" className={styles.closeBtn} onClick={() => setOpen(false)} aria-label="Kapat">
-                <X className="w-4 h-4" />
-              </button>
+              <div className={styles.headerActions}>
+                <button type="button" className={styles.minimizeBtn} onClick={handleMinimize} aria-label="Gizle">
+                  Gizle
+                </button>
+                <button type="button" className={styles.closeBtn} onClick={() => setOpen(false)} aria-label="Kapat">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </header>
 
             <div ref={scrollRef} className={styles.body}>
@@ -572,6 +623,6 @@ export default function ChatWidget() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
