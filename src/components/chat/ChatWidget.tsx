@@ -350,7 +350,8 @@ export default function ChatWidget() {
   }
 
   return (
-    <div className={styles.root}>
+    <>
+      <div className={styles.root}>
       {!open && minimized && (
         <button
           type="button"
@@ -395,6 +396,7 @@ export default function ChatWidget() {
           </button>
         </div>
       )}
+      </div>
 
       {open && (
         <div className={styles.overlay}>
@@ -623,6 +625,6 @@ export default function ChatWidget() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
