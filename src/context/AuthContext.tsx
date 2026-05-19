@@ -5,6 +5,7 @@ import {
   normalizeUserRole,
   profilePictureFromApiUser,
 } from "@/shared/utils/profilePicture";
+import { syncDemoUserFromMe } from "@/shared/utils/demoUser";
 
 export type AuthUser = {
   id?: number;
@@ -139,6 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         const data = (await response.json()) as Record<string, unknown>;
         const updatedUser = mapApiUser(data, profileFallback, profileUrlFallback);
+        syncDemoUserFromMe(data);
         applyUser(updatedUser);
         return;
       }

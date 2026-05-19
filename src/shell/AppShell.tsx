@@ -3,6 +3,9 @@ import { ChevronRight, LayoutDashboard, Menu, Shield, Wrench } from "lucide-reac
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { calculationModules, type CalculationModuleRoute } from "@/calculations/registry";
 import GlobalCalculationTools from "@/components/GlobalCalculationTools";
+import ChatWidget from "@/components/chat/ChatWidget";
+import StarterWelcomeModal from "@/components/StarterWelcomeModal";
+import { useDemoStarterWelcome } from "@/hooks/useDemoStarterWelcome";
 import AppBreadcrumb from "./AppBreadcrumb";
 import AppHeader from "./AppHeader";
 import { isAdminRole } from "@/shared/utils/profilePicture";
@@ -56,6 +59,7 @@ function readIsAdmin(): boolean {
 
 export default function AppShell() {
   const location = useLocation();
+  const { open: starterWelcomeOpen, onClose: onStarterWelcomeClose } = useDemoStarterWelcome();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem("sidebarCollapsed") === "true",
   );
@@ -186,6 +190,8 @@ export default function AppShell() {
         </main>
       </div>
       <GlobalCalculationTools />
+      <StarterWelcomeModal open={starterWelcomeOpen} onClose={onStarterWelcomeClose} />
+      <ChatWidget />
     </div>
   );
 }

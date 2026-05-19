@@ -50,13 +50,15 @@ export default function LoginPage() {
 
       const tenantId = Number(localStorage.getItem("tenant_id") || "1");
       const licenseValid = localStorage.getItem("licenseValid") === "true";
+      const licenseType = (data.licenseType || "").toLowerCase();
+      const isDemoUser = licenseType === "demo";
 
       if (tenantId === 1) {
         navigate("/dashboard", { replace: true });
         return;
       }
 
-      if (!licenseValid) {
+      if (!licenseValid && !isDemoUser) {
         navigate("/professional-license-activation", { replace: true });
         return;
       }

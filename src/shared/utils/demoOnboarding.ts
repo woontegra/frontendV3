@@ -11,13 +11,10 @@ type DemoOnboardingPayload = {
   dontShowAgain?: boolean;
 };
 
+import { isDemoUserFromStorage } from "@/shared/utils/demoUser";
+
 function isDemoUserLocal(): boolean {
-  try {
-    const current = JSON.parse(localStorage.getItem("current_user") || "null");
-    return (current?.licenseType || "").toLowerCase() === "demo";
-  } catch {
-    return false;
-  }
+  return isDemoUserFromStorage();
 }
 
 export async function trackDemoOnboardingEvent(

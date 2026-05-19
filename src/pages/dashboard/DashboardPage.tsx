@@ -18,9 +18,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import StarterWelcomeModal from "@/components/StarterWelcomeModal";
 import { getSubscriptionTypeLabel } from "@/shared/utils/labelMappings";
-import { trackDemoOnboardingEvent } from "@/shared/utils/demoOnboarding";
 import {
   calculateSubscription,
   subscriptionProgressClass,
@@ -127,7 +125,7 @@ function planBadgeClass(label: string): string {
 }
 
 export default function DashboardPage() {
-  const { isAdmin, currentUser } = readDashboardUserRole();
+  const { isAdmin } = readDashboardUserRole();
 
   const [loading, setLoading] = useState(true);
   const [savedCases, setSavedCases] = useState<SavedCase[]>([]);
@@ -136,8 +134,6 @@ export default function DashboardPage() {
   const [financialError, setFinancialError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("aylik");
   const [detailRow, setDetailRow] = useState<RecentRow | null>(null);
-  const [showStarterWelcome, setShowStarterWelcome] = useState(false);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -231,43 +227,6 @@ export default function DashboardPage() {
       minute: "2-digit",
     });
   }, []);
-
-  const isDemoUser =
-    (currentUser?.licenseType || "").toLowerCase() === "demo" || !!userInfo?.demoLicense;
-  const starterUserKey = (currentUser?.email || "anonymous").toLowerCase();
-
-  useEffect(() => {
-    if (!isDemoUser) {
-      return;
-    }
-
-    const seenKey = `starter_welcome_seen_${starterUserKey}`;
-    const hideKey = `starter_welcome_hide_${starterUserKey}`;
-    const alreadySeen = localStorage.getItem(seenKey) === "1";
-    const hideForever = localStorage.getItem(hideKey) === "1";
-
-    if (!alreadySeen && !hideForever) {
-      setShowStarterWelcome(true);
-    }
-  }, [isDemoUser, starterUserKey]);
-
-  useEffect(() => {
-    if (!showStarterWelcome || !isDemoUser) {
-      return;
-    }
-    void trackDemoOnboardingEvent("modal_shown");
-  }, [showStarterWelcome, isDemoUser]);
-
-  const handleStarterWelcomeClose = (dontShowAgain: boolean) => {
-    const seenKey = `starter_welcome_seen_${starterUserKey}`;
-    const hideKey = `starter_welcome_hide_${starterUserKey}`;
-    localStorage.setItem(seenKey, "1");
-    if (dontShowAgain) {
-      localStorage.setItem(hideKey, "1");
-    }
-    setShowStarterWelcome(false);
-    void trackDemoOnboardingEvent("modal_closed", { dontShowAgain });
-  };
 
   const lastRecordName = savedCases[0]?.name ?? "-";
 
@@ -407,7 +366,6 @@ export default function DashboardPage() {
 
   return (
     <div className={styles.page}>
-      <StarterWelcomeModal open={showStarterWelcome} onClose={handleStarterWelcomeClose} />
       <div className={styles.statGrid}>
         <div className={`${styles.card} ${styles.statCard}`}>
           <div className={`${styles.statIcon} ${styles.statIconBlue}`}>
