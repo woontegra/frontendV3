@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Headphones, MessageCircle, Send, X } from "lucide-react";
+import { CheckCircle2, Headphones, MessageSquare, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiClient, API_BASE_URL } from "@/utils/apiClient";
+import { isAdminRole } from "@/shared/utils/profilePicture";
 import styles from "./ChatWidget.module.css";
 
 const POLL_INTERVAL = 5000;
@@ -26,6 +27,7 @@ interface ChatMessage {
 }
 
 type SubmitState = "idle" | "success" | "error";
+type PresenceMode = "loading" | "online" | "offline";
 
 function readStoredUser(): { name: string; email: string } {
   try {
@@ -43,20 +45,34 @@ function readStoredUser(): { name: string; email: string } {
   }
 }
 
-function shouldShowWidget(): boolean {
-  if (!localStorage.getItem("access_token")) {
-    return false;
+function computeWidgetAccess(): { show: boolean; token: string | null } {
+  const token = localStorage.getItem("access_token");
+  if (!token) {
+    return { show: false, token: null };
   }
-  const tenantId = Number(localStorage.getItem("tenant_id") || "1");
-  const role = (localStorage.getItem("user_role") || "").toLowerCase();
-  return !(tenantId === 1 && role === "admin");
+
+  try {
+    const current = JSON.parse(localStorage.getItem("current_user") || "null") as {
+      role?: string;
+      tenantId?: number;
+    } | null;
+    const tenantId = Number(current?.tenantId ?? localStorage.getItem("tenant_id") ?? "1");
+    if (isAdminRole(current?.role, tenantId)) {
+      return { show: false, token };
+    }
+  } catch {
+    /* giriş yapmış normal kullanıcı */
+  }
+
+  return { show: true, token };
 }
 
 export default function ChatWidget() {
-  const [visible] = useState(shouldShowWidget);
+  const [authTick, setAuthTick] = useState(0);
+  const access = useMemo(() => computeWidgetAccess(), [authTick]);
+
   const [open, setOpen] = useState(false);
-  const [hasOnlineAdmin, setHasOnlineAdmin] = useState(false);
-  const [presenceReady, setPresenceReady] = useState(false);
+  const [presenceMode, setPresenceMode] = useState<PresenceMode>("loading");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -72,9 +88,24 @@ export default function ChatWidget() {
   const [offlineSubmitState, setOfflineSubmitState] = useState<SubmitState>("idle");
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const token = access.token;
 
-  const isOnline = hasOnlineAdmin;
+  /** Yalnızca presence API başarılı ve admin online ise canlı chat */
+  const isOnline = presenceMode === "online";
+  const isOfflineMode = !isOnline;
+
+  useEffect(() => {
+    const onAuthChanged = () => setAuthTick((n) => n + 1);
+    window.addEventListener("auth-changed", onAuthChanged);
+    return () => window.removeEventListener("auth-changed", onAuthChanged);
+  }, []);
+
+  const launcherCopy = useMemo(() => {
+    if (isOnline) {
+      return { title: "Canlı Destek", tag: "Çevrimiçi", variant: "online" as const };
+    }
+    return { title: "Destek Bırakın", tag: "Çevrimdışı", variant: "offline" as const };
+  }, [isOnline]);
 
   const headerCopy = useMemo(() => {
     if (isOnline) {
@@ -87,9 +118,9 @@ export default function ChatWidget() {
     return {
       title: "Destek Talebi Bırakın",
       subtitle: "Şu an çevrimdışı olabiliriz. Mesajınızı bırakın, en kısa sürede dönüş yapalım.",
-      badge: "Çevrimdışı",
+      badge: presenceMode === "loading" ? "Bağlanıyor…" : "Çevrimdışı",
     };
-  }, [isOnline]);
+  }, [isOnline, presenceMode]);
 
   const loadPresence = useCallback(async () => {
     if (!token) {
@@ -99,14 +130,12 @@ export default function ChatWidget() {
       const res = await apiClient("/api/admin/presence/status");
       if (res.ok) {
         const data = (await res.json()) as { hasOnlineAdmin?: boolean };
-        setHasOnlineAdmin(!!data?.hasOnlineAdmin);
+        setPresenceMode(data?.hasOnlineAdmin ? "online" : "offline");
       } else {
-        setHasOnlineAdmin(false);
+        setPresenceMode("offline");
       }
     } catch {
-      setHasOnlineAdmin(false);
-    } finally {
-      setPresenceReady(true);
+      setPresenceMode("offline");
     }
   }, [token]);
 
@@ -172,7 +201,7 @@ export default function ChatWidget() {
   }, [token, open, conversationId, isOnline]);
 
   useEffect(() => {
-    if (!visible) {
+    if (!access.show) {
       return;
     }
     const stored = readStoredUser();
@@ -181,7 +210,7 @@ export default function ChatWidget() {
     void loadPresence();
     const t = setInterval(() => void loadPresence(), POLL_INTERVAL);
     return () => clearInterval(t);
-  }, [visible, loadPresence]);
+  }, [access.show, loadPresence]);
 
   useEffect(() => {
     if (!open || !isOnline) {
@@ -201,7 +230,7 @@ export default function ChatWidget() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, open]);
+  }, [messages, open, offlineSubmitState]);
 
   const sendMessage = async () => {
     const text = input.trim().slice(0, 1000);
@@ -259,12 +288,7 @@ export default function ChatWidget() {
     setOfflineSubmitting(true);
     setOfflineSubmitState("idle");
     try {
-      const description = [
-        `Gönderen: ${name}`,
-        `E-posta: ${email}`,
-        "",
-        message,
-      ].join("\n");
+      const description = [`Gönderen: ${name}`, `E-posta: ${email}`, "", message].join("\n");
 
       const res = await apiClient("/api/tickets", {
         method: "POST",
@@ -297,7 +321,7 @@ export default function ChatWidget() {
 
   const imgUrl = (url: string) => (url.startsWith("http") ? url : `${API_BASE_URL}${url}`);
 
-  if (!visible || !token) {
+  if (!access.show || !token) {
     return null;
   }
 
@@ -310,16 +334,18 @@ export default function ChatWidget() {
             setOpen(true);
             setOfflineSubmitState("idle");
           }}
-          className={styles.launcher}
-          aria-label={isOnline ? "Canlı destek" : "Destek talebi bırak"}
+          className={`${styles.launcher} ${launcherCopy.variant === "online" ? styles.launcherOnline : styles.launcherOffline}`}
+          aria-label={launcherCopy.title}
         >
-          <MessageCircle className={styles.launcherIcon} aria-hidden />
-          <span className={styles.statusRow}>
+          <span className={styles.launcherIconWrap} aria-hidden>
+            <MessageSquare className={styles.launcherIcon} />
             <span
-              className={`${styles.statusDot} ${isOnline ? styles.statusDotOnline : styles.statusDotOffline}`}
-              aria-hidden
+              className={`${styles.launcherPulse} ${launcherCopy.variant === "online" ? styles.launcherPulseOnline : styles.launcherPulseOffline}`}
             />
-            <span className={styles.launcherLabel}>{isOnline ? "Aktif" : "Mesaj bırakın"}</span>
+          </span>
+          <span className={styles.launcherText}>
+            <span className={styles.launcherTitle}>{launcherCopy.title}</span>
+            <span className={styles.launcherTag}>{launcherCopy.tag}</span>
           </span>
         </button>
       )}
@@ -327,21 +353,25 @@ export default function ChatWidget() {
       {open && (
         <div className={styles.overlay}>
           <div className={styles.backdrop} onClick={() => setOpen(false)} aria-hidden />
-          <div className={styles.panel} role="dialog" aria-label={headerCopy.title}>
-            <header className={styles.header}>
-              <div className={styles.brandRow}>
+          <div
+            className={`${styles.panel} ${isOnline ? styles.panelOnline : styles.panelOffline}`}
+            role="dialog"
+            aria-label={headerCopy.title}
+          >
+            <header className={`${styles.header} ${isOnline ? styles.headerOnline : styles.headerOffline}`}>
+              <div className={styles.headerMain}>
                 <div className={styles.brandMark} aria-hidden>
                   BH
                 </div>
-                <div>
+                <div className={styles.headerCopy}>
                   <h3 className={styles.headerTitle}>{headerCopy.title}</h3>
                   <p className={styles.headerSubtitle}>{headerCopy.subtitle}</p>
-                  <span className={styles.badge}>
+                  <span className={styles.statusBadge}>
                     <span
                       className={`${styles.statusDot} ${isOnline ? styles.statusDotOnline : styles.statusDotOffline}`}
                       aria-hidden
                     />
-                    {presenceReady ? headerCopy.badge : "Durum kontrol ediliyor…"}
+                    {headerCopy.badge}
                   </span>
                 </div>
               </div>
@@ -351,7 +381,24 @@ export default function ChatWidget() {
             </header>
 
             <div ref={scrollRef} className={styles.body}>
-              {isOnline ? (
+              {offlineSubmitState === "success" && isOfflineMode ? (
+                <div className={styles.successScreen}>
+                  <CheckCircle2 className={styles.successIcon} aria-hidden />
+                  <h4 className={styles.successTitle}>Mesajınız alındı</h4>
+                  <p className={styles.successText}>En kısa sürede size dönüş yapacağız.</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => {
+                      setOpen(false);
+                      setOfflineSubmitState("idle");
+                    }}
+                  >
+                    Kapat
+                  </Button>
+                </div>
+              ) : isOnline ? (
                 <>
                   {loading ? (
                     <p className={styles.loadingText}>Yükleniyor…</p>
@@ -359,8 +406,9 @@ export default function ChatWidget() {
                     <p className={styles.alertError}>{loadError}</p>
                   ) : messages.length === 0 ? (
                     <div className={styles.emptyState}>
-                      <Headphones className="w-9 h-9 mx-auto mb-2 opacity-40" aria-hidden />
-                      <p>Merhaba! Size nasıl yardımcı olabiliriz?</p>
+                      <Headphones className={styles.emptyIcon} aria-hidden />
+                      <p className={styles.emptyTitle}>Merhaba!</p>
+                      <p className={styles.emptyText}>Size nasıl yardımcı olabiliriz? Mesajınızı yazın, hemen yanıtlayalım.</p>
                     </div>
                   ) : (
                     <div className={styles.messages}>
@@ -369,18 +417,16 @@ export default function ChatWidget() {
                           key={m.id}
                           className={m.senderType === "user" ? styles.messageRowUser : styles.messageRowAdmin}
                         >
-                          <div
-                            className={m.senderType === "user" ? styles.bubbleUser : styles.bubbleAdmin}
-                          >
+                          <div className={m.senderType === "user" ? styles.bubbleUser : styles.bubbleAdmin}>
                             {m.senderType === "admin" && (
-                              <p className="text-[10px] font-semibold opacity-80 mb-0.5">Bilirkişi Hesap</p>
+                              <p className={styles.bubbleSender}>Bilirkişi Hesap</p>
                             )}
                             {m.imageUrl && (
                               <a href={imgUrl(m.imageUrl)} target="_blank" rel="noopener noreferrer">
                                 <img
                                   src={imgUrl(m.imageUrl)}
                                   alt="Gönderilen görsel"
-                                  className="max-w-full max-h-40 rounded object-contain"
+                                  className={styles.bubbleImage}
                                 />
                               </a>
                             )}
@@ -405,16 +451,15 @@ export default function ChatWidget() {
                     void submitOfflineTicket();
                   }}
                 >
-                  {offlineSubmitState === "success" && (
-                    <p className={styles.alertSuccess}>
-                      Mesajınız alındı. En kısa sürede size dönüş yapacağız.
-                    </p>
-                  )}
                   {offlineSubmitState === "error" && (
                     <p className={styles.alertError}>
                       Mesajınız gönderilemedi. Lütfen daha sonra tekrar deneyin.
                     </p>
                   )}
+
+                  <p className={styles.formIntro}>
+                    Ekibimiz şu an çevrimdışı. Formu doldurun; talebiniz destek paneline kaydedilir.
+                  </p>
 
                   <div>
                     <p className={styles.fieldLabel}>Konu seçin</p>
@@ -478,52 +523,52 @@ export default function ChatWidget() {
               )}
             </div>
 
-            <footer className={styles.footer}>
-              {isOnline ? (
-                <>
-                  <div className={styles.footerRow}>
-                    <input
-                      type="text"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value.slice(0, 1000))}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          void sendMessage();
-                        }
-                      }}
-                      placeholder="Mesajınızı yazın…"
-                      maxLength={1000}
-                      className={styles.fieldInput}
-                    />
+            {!(offlineSubmitState === "success" && isOfflineMode) && (
+              <footer className={styles.footer}>
+                {isOnline ? (
+                  <>
+                    <div className={styles.footerRow}>
+                      <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value.slice(0, 1000))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            void sendMessage();
+                          }
+                        }}
+                        placeholder="Mesajınızı yazın…"
+                        maxLength={1000}
+                        className={styles.fieldInput}
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        onClick={() => void sendMessage()}
+                        disabled={!input.trim() || sending}
+                        className={styles.sendBtn}
+                      >
+                        <Send className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <p className={styles.helpText}>Enter ile gönderebilirsiniz.</p>
+                  </>
+                ) : (
+                  <>
                     <Button
                       type="button"
-                      size="icon"
-                      onClick={() => void sendMessage()}
-                      disabled={!input.trim() || sending}
-                      className="rounded-lg bg-indigo-600 hover:bg-indigo-700 flex-shrink-0"
+                      className={styles.submitBtn}
+                      disabled={offlineSubmitting}
+                      onClick={() => void submitOfflineTicket()}
                     >
-                      <Send className="w-4 h-4" />
+                      {offlineSubmitting ? "Gönderiliyor…" : "Mesajı Gönder"}
                     </Button>
-                  </div>
-                  <p className={styles.helpText}>Enter ile gönderebilirsiniz. Yanıtlar canlı sohbet üzerinden iletilir.</p>
-                </>
-              ) : (
-                <>
-                  <Button
-                    type="button"
-                    className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700"
-                    disabled={offlineSubmitting || offlineSubmitState === "success"}
-                    onClick={() => void submitOfflineTicket()}
-                  >
-                    {offlineSubmitting ? "Gönderiliyor…" : "Mesajı Gönder"}
-                  </Button>
-                  <p className={styles.helpText}>
-                    Talebiniz destek paneline kaydedilir ve ekibimize e-posta ile iletilir.
-                  </p>
-                </>
-              )}
-            </footer>
+                    <p className={styles.helpText}>Talebiniz destek paneline kaydedilir ve e-posta ile iletilir.</p>
+                  </>
+                )}
+              </footer>
+            )}
           </div>
         </div>
       )}

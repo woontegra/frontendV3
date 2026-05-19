@@ -3,7 +3,6 @@ import { ChevronRight, LayoutDashboard, Menu, Shield, Wrench } from "lucide-reac
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { calculationModules, type CalculationModuleRoute } from "@/calculations/registry";
 import GlobalCalculationTools from "@/components/GlobalCalculationTools";
-import ChatWidget from "@/components/chat/ChatWidget";
 import StarterWelcomeModal from "@/components/StarterWelcomeModal";
 import { useDemoStarterWelcome } from "@/hooks/useDemoStarterWelcome";
 import AppBreadcrumb from "./AppBreadcrumb";
@@ -191,7 +190,6 @@ export default function AppShell() {
       </div>
       <GlobalCalculationTools />
       <StarterWelcomeModal open={starterWelcomeOpen} onClose={onStarterWelcomeClose} />
-      <ChatWidget />
     </div>
   );
 }

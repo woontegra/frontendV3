@@ -93,6 +93,7 @@ import DamgaVergisiKesintiliPage from "@/calculations/icra-takip-brutten-nete/Da
 import GelirVeDamgaVergisiKesintiliPage from "@/calculations/icra-takip-brutten-nete/GelirVeDamgaVergisiKesintiliPage";
 import IstisnaliFullKesintiliPage from "@/calculations/icra-takip-brutten-nete/IstisnaliFullKesintiliPage";
 import IstisnasizFullKesintiliPage from "@/calculations/icra-takip-brutten-nete/IstisnasizFullKesintiliPage";
+import ChatWidget from "@/components/chat/ChatWidget";
 import SessionKeepAlive from "@/components/SessionKeepAlive";
 import AppShell from "@/shell/AppShell";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
@@ -109,7 +110,12 @@ function ProtectedShell() {
     return <Navigate to="/login" replace />;
   }
 
-  return <AppShell />;
+  return (
+    <>
+      <AppShell />
+      <ChatWidget />
+    </>
+  );
 }
 
 function AdminOnly({ children }: { children: ReactNode }) {
