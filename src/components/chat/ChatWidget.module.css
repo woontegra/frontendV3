@@ -637,6 +637,11 @@
   line-height: 1.35;
 }
 
+.typingHint {
+  margin-top: 0.35rem;
+  padding-left: 0.25rem;
+}
+
 .alertError {
   padding: 0.6rem 0.7rem;
   border-radius: 0.55rem;

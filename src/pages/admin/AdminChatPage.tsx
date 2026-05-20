@@ -12,9 +12,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { apiClient } from "@/utils/apiClient";
+import { apiClient } from "@/api/apiClient";
+import TypingIndicator from "@/components/chat/TypingIndicator";
+import { useChatTypingEmitter } from "@/hooks/useChatTypingEmitter";
+import { emitAdminChatReplySent } from "@/shared/utils/adminChatNotificationBridge";
 
 const POLL_INTERVAL = 5000;
+const CHAT_POLL_INTERVAL = 3000;
 const PRESENCE_HEARTBEAT = 60 * 1000;
 
 interface ChatMessage {
@@ -37,6 +41,18 @@ interface Conversation {
   user: { id: number; name: string; email: string };
   assignedAdmin: { id: number; name: string; email: string } | null;
   unreadCount: number;
+  isUserTyping?: boolean;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "İstek başarısız oldu. Lütfen tekrar deneyin.";
+}
+
+function hasAccessToken(): boolean {
+  return !!localStorage.getItem("access_token");
 }
 
 export default function AdminChatPage() {
@@ -47,16 +63,20 @@ export default function AdminChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [filter, setFilter] = useState<"all" | "assigned" | "unassigned">("all");
+  const [listLoading, setListLoading] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [userTyping, setUserTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+
+  const selectedId = selected?.id ?? null;
 
   const loadMyPresence = useCallback(async () => {
     try {
-      const res = await apiClient("/api/admin/presence/me");
-      if (res.ok) {
-        const data = await res.json();
-        setIsOnline(!!data?.isOnline);
-      }
+      const data = await apiClient<{ isOnline?: boolean }>("/api/admin/presence/me");
+      setIsOnline(!!data?.isOnline);
     } catch {
       setIsOnline(false);
     }
@@ -64,70 +84,177 @@ export default function AdminChatPage() {
 
   const togglePresence = useCallback(async () => {
     try {
-      const res = await apiClient("/api/admin/presence/toggle", {
+      const data = await apiClient<{ isOnline?: boolean }>("/api/admin/presence/toggle", {
         method: "POST",
         body: JSON.stringify({ isOnline: !isOnline }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setIsOnline(!!data?.isOnline);
-      }
+      setIsOnline(!!data?.isOnline);
     } catch {
-      // ignore
+      /* ignore */
     }
   }, [isOnline]);
 
   const loadConversations = useCallback(async () => {
-    if (!token) return;
-    try {
-      const q = filter !== "all" ? `?filter=${filter}` : "";
-      const res = await apiClient(`/api/admin/chat/conversations${q}`);
-      if (res.ok) {
-        const data = await res.json();
-        setConversations(data?.conversations || []);
-      }
-    } catch {
-      setConversations([]);
+    if (!hasAccessToken()) {
+      setListError("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
+      return;
     }
-  }, [token, filter]);
 
-  const loadMessages = useCallback(async () => {
-    if (!selected || !token) return;
     try {
-      const res = await apiClient(`/api/admin/chat/messages/${selected.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(data?.messages || []);
-      }
-    } catch {
-      setMessages([]);
+      setListError(null);
+      const q = filter !== "all" ? `?filter=${filter}` : "";
+      const data = await apiClient<{ conversations?: Conversation[] }>(
+        `/api/admin/chat/conversations${q}`,
+      );
+      const list = data?.conversations ?? [];
+      setConversations(list);
+      setSelected((prev) => {
+        if (!prev) return null;
+        return list.find((c) => c.id === prev.id) ?? prev;
+      });
+    } catch (error) {
+      setListError(getErrorMessage(error));
     }
-  }, [selected, token]);
+  }, [filter]);
+
+  const loadMessages = useCallback(async (conversationId?: string) => {
+    const id = conversationId ?? selectedId;
+    if (!id || !hasAccessToken()) return;
+
+    try {
+      setMessagesError(null);
+      const data = await apiClient<{ messages?: ChatMessage[]; userTyping?: boolean }>(
+        `/api/admin/chat/messages/${id}`,
+      );
+      setMessages(data?.messages ?? []);
+      setUserTyping(!!data?.userTyping);
+    } catch (error) {
+      setMessagesError(getErrorMessage(error));
+    }
+  }, [selectedId]);
+
+  const loadTypingStatus = useCallback(async (conversationId?: string) => {
+    const id = conversationId ?? selectedId;
+    if (!id || !hasAccessToken()) return;
+
+    try {
+      const data = await apiClient<{ userTyping?: boolean }>(
+        `/api/admin/chat/typing-status/${id}`,
+      );
+      setUserTyping(!!data?.userTyping);
+    } catch {
+      /* sessiz */
+    }
+  }, [selectedId]);
+
+  const handleRefresh = useCallback(async () => {
+    if (!hasAccessToken()) {
+      setListError("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
+      return;
+    }
+
+    setRefreshing(true);
+    try {
+      setListError(null);
+      setMessagesError(null);
+      const q = filter !== "all" ? `?filter=${filter}` : "";
+      const data = await apiClient<{ conversations?: Conversation[] }>(
+        `/api/admin/chat/conversations${q}`,
+      );
+      const list = data?.conversations ?? [];
+      setConversations(list);
+
+      const activeId = selectedId;
+      if (activeId) {
+        const updated = list.find((c) => c.id === activeId);
+        if (updated) {
+          setSelected(updated);
+        }
+        const msgData = await apiClient<{ messages?: ChatMessage[]; userTyping?: boolean }>(
+          `/api/admin/chat/messages/${activeId}`,
+        );
+        setMessages(msgData?.messages ?? []);
+        setUserTyping(!!msgData?.userTyping);
+      } else {
+        setSelected((prev) => {
+          if (!prev) return null;
+          return list.find((c) => c.id === prev.id) ?? prev;
+        });
+      }
+    } catch (error) {
+      setListError(getErrorMessage(error));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [filter, selectedId]);
 
   useEffect(() => {
-    loadMyPresence();
+    void loadMyPresence();
   }, [loadMyPresence]);
 
   useEffect(() => {
-    loadConversations();
-    const t = setInterval(loadConversations, POLL_INTERVAL);
-    return () => clearInterval(t);
+    let cancelled = false;
+    const run = async () => {
+      setListLoading(true);
+      await loadConversations();
+      if (!cancelled) setListLoading(false);
+    };
+    void run();
+    const t = setInterval(() => void loadConversations(), POLL_INTERVAL);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
   }, [loadConversations]);
 
+  const sendAdminTyping = useCallback(
+    async (typing: boolean) => {
+      if (!selectedId) return;
+      await apiClient("/api/admin/chat/typing", {
+        method: "POST",
+        body: JSON.stringify({ conversationId: selectedId, typing }),
+      });
+    },
+    [selectedId],
+  );
+
+  const { notifyTyping, stopTyping } = useChatTypingEmitter({
+    enabled: isOnline && !!selectedId,
+    conversationId: selectedId,
+    sendTyping: sendAdminTyping,
+  });
+
   useEffect(() => {
-    if (selected) {
-      loadMessages();
-      const t = setInterval(loadMessages, POLL_INTERVAL);
-      return () => clearInterval(t);
+    if (!selectedId) {
+      setMessages([]);
+      setMessagesError(null);
+      setUserTyping(false);
+      return;
     }
-  }, [selected, loadMessages]);
+
+    let cancelled = false;
+    const run = async () => {
+      setMessagesLoading(true);
+      await Promise.all([loadMessages(selectedId), loadTypingStatus(selectedId)]);
+      if (!cancelled) setMessagesLoading(false);
+    };
+    void run();
+
+    const msgTimer = setInterval(() => void loadMessages(selectedId), CHAT_POLL_INTERVAL);
+    const typingTimer = setInterval(() => void loadTypingStatus(selectedId), CHAT_POLL_INTERVAL);
+    return () => {
+      cancelled = true;
+      clearInterval(msgTimer);
+      clearInterval(typingTimer);
+    };
+  }, [selectedId, loadMessages, loadTypingStatus]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
-  }, [messages]);
+  }, [messages, userTyping]);
 
   useEffect(() => {
-    if (!isOnline || !token) return;
+    if (!isOnline || !hasAccessToken()) return;
     const heartbeat = () => {
       apiClient("/api/admin/presence/toggle", {
         method: "POST",
@@ -136,52 +263,54 @@ export default function AdminChatPage() {
     };
     const t = setInterval(heartbeat, PRESENCE_HEARTBEAT);
     return () => clearInterval(t);
-  }, [isOnline, token]);
+  }, [isOnline]);
 
   const handleAssign = async () => {
-    if (!selected || !token) return;
+    if (!selectedId) return;
     try {
-      const res = await apiClient(`/api/admin/chat/assign/${selected.id}`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        loadConversations();
-        setSelected((s) => (s ? { ...s, assignedTo: 1 } : null));
-      }
-    } catch {
-      // ignore
+      await apiClient(`/api/admin/chat/assign/${selectedId}`, { method: "POST" });
+      await loadConversations();
+      setSelected((s) => (s ? { ...s, assignedTo: 1 } : null));
+    } catch (error) {
+      setListError(getErrorMessage(error));
     }
   };
 
   const handleClose = async () => {
-    if (!selected || !token) return;
+    if (!selectedId) return;
     try {
-      const res = await apiClient(`/api/admin/chat/close/${selected.id}`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        setSelected(null);
-        loadConversations();
-      }
-    } catch {
-      // ignore
+      await apiClient(`/api/admin/chat/close/${selectedId}`, { method: "POST" });
+      setSelected(null);
+      setMessages([]);
+      await loadConversations();
+    } catch (error) {
+      setListError(getErrorMessage(error));
     }
   };
 
   const handleSend = async () => {
     const text = input.trim().slice(0, 1000);
-    if (!text || !selected || sending || !token) return;
+    if (!text || !selectedId || sending) return;
+    stopTyping();
     setSending(true);
     try {
-      const res = await apiClient("/api/admin/chat/message", {
+      const data = await apiClient<{ message?: ChatMessage }>("/api/admin/chat/message", {
         method: "POST",
-        body: JSON.stringify({ conversationId: selected.id, message: text }),
+        body: JSON.stringify({ conversationId: selectedId, message: text }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setMessages((prev) => [...prev, data.message]);
+      if (data?.message) {
+        const sent = data.message as ChatMessage;
+        setMessages((prev) => [...prev, sent]);
         setInput("");
+        setUserTyping(false);
+        emitAdminChatReplySent({
+          conversationId: selectedId,
+          lastMessageAt: sent.createdAt ?? new Date().toISOString(),
+        });
+        await Promise.all([loadConversations(), loadMessages(selectedId)]);
       }
+    } catch (error) {
+      setMessagesError(getErrorMessage(error));
     } finally {
       setSending(false);
     }
@@ -209,7 +338,7 @@ export default function AdminChatPage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={togglePresence}
+              onClick={() => void togglePresence()}
               className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium transition-colors ${
                 isOnline
                   ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
@@ -223,12 +352,23 @@ export default function AdminChatPage() {
               )}
               {isOnline ? "Çevrimiçi" : "Çevrimdışı"}
             </button>
-            <Button variant="outline" size="sm" onClick={loadConversations}>
-              <RefreshCw className="h-4 w-4 mr-2" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleRefresh()}
+              disabled={refreshing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
               Yenile
             </Button>
           </div>
         </div>
+
+        {listError ? (
+          <p className="mb-4 text-sm text-red-600 dark:text-red-400" role="alert">
+            {listError}
+          </p>
+        ) : null}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-220px)] min-h-[400px]">
           <div className="lg:col-span-1 bg-white dark:bg-gray-900/80 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden flex flex-col">
@@ -265,7 +405,11 @@ export default function AdminChatPage() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
-              {conversations.length === 0 ? (
+              {listLoading && conversations.length === 0 ? (
+                <p className="p-6 text-sm text-gray-500 dark:text-gray-400 text-center">
+                  Konuşmalar yükleniyor...
+                </p>
+              ) : conversations.length === 0 ? (
                 <p className="p-6 text-sm text-gray-500 dark:text-gray-400 text-center">
                   Açık konuşma yok
                 </p>
@@ -273,9 +417,10 @@ export default function AdminChatPage() {
                 conversations.map((c) => (
                   <button
                     key={c.id}
+                    type="button"
                     onClick={() => setSelected(c)}
                     className={`w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
-                      selected?.id === c.id
+                      selectedId === c.id
                         ? "bg-indigo-50 dark:bg-indigo-900/20 border-l-4 border-indigo-600"
                         : ""
                     }`}
@@ -294,9 +439,13 @@ export default function AdminChatPage() {
                       {c.user?.email}
                     </p>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                      {c.lastMessageAt
-                        ? new Date(c.lastMessageAt).toLocaleString("tr-TR")
-                        : "Henüz mesaj yok"}
+                      {c.isUserTyping ? (
+                        <span className="text-indigo-600 dark:text-indigo-400">yazıyor…</span>
+                      ) : c.lastMessageAt ? (
+                        new Date(c.lastMessageAt).toLocaleString("tr-TR")
+                      ) : (
+                        "Henüz mesaj yok"
+                      )}
                     </p>
                   </button>
                 ))
@@ -320,12 +469,12 @@ export default function AdminChatPage() {
                   </div>
                   <div className="flex gap-2">
                     {!selected.assignedTo && (
-                      <Button size="sm" onClick={handleAssign} variant="outline">
+                      <Button size="sm" onClick={() => void handleAssign()} variant="outline">
                         <UserCheck className="h-4 w-4 mr-2" />
                         Sahiplen
                       </Button>
                     )}
-                    <Button size="sm" variant="destructive" onClick={handleClose}>
+                    <Button size="sm" variant="destructive" onClick={() => void handleClose()}>
                       <XCircle className="h-4 w-4 mr-2" />
                       Kapat
                     </Button>
@@ -336,6 +485,16 @@ export default function AdminChatPage() {
                   ref={scrollRef}
                   className="flex-1 overflow-y-auto p-4 space-y-3"
                 >
+                  {messagesError ? (
+                    <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+                      {messagesError}
+                    </p>
+                  ) : null}
+                  {messagesLoading && messages.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+                      Mesajlar yükleniyor...
+                    </p>
+                  ) : null}
                   {messages.map((m) => (
                     <div
                       key={m.id}
@@ -361,19 +520,28 @@ export default function AdminChatPage() {
                 </div>
 
                 <div className="p-3 border-t border-gray-200 dark:border-gray-800">
+                  {userTyping ? (
+                    <TypingIndicator
+                      label="Kullanıcı yazıyor"
+                      className="text-xs text-gray-500 dark:text-gray-400 mb-2"
+                    />
+                  ) : null}
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={input}
-                      onChange={(e) => setInput(e.target.value.slice(0, 1000))}
-                      onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                      onChange={(e) => {
+                        setInput(e.target.value.slice(0, 1000));
+                        notifyTyping();
+                      }}
+                      onKeyDown={(e) => e.key === "Enter" && void handleSend()}
                       placeholder="Yanıt yazın..."
                       maxLength={1000}
                       className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                     <Button
                       size="icon"
-                      onClick={handleSend}
+                      onClick={() => void handleSend()}
                       disabled={!input.trim() || sending}
                     >
                       <Send className="h-4 w-4" />

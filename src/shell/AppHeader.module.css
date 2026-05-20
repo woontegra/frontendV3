@@ -101,6 +101,44 @@
   gap: 0.15rem;
 }
 
+.chatLink {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  color: var(--text);
+}
+
+.chatLink:hover {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.chatIcon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.chatBadge {
+  position: absolute;
+  top: 0.05rem;
+  right: 0.05rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.9rem;
+  height: 0.9rem;
+  padding: 0 0.15rem;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.55rem;
+  line-height: 1;
+}
+
 .ticketLink {
   display: inline-flex;
   align-items: center;

@@ -2,10 +2,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Bell, Moon, Sun, Ticket, Video } from "lucide-react";
 import { apiClient } from "@/api/apiClient";
+import AdminHeaderChatActions from "@/components/admin/AdminHeaderChatActions";
 import UserMenu from "@/components/UserMenu";
 import { useAuth } from "@/context/AuthContext";
+import { isAdminRole } from "@/shared/utils/profilePicture";
 import { getPageTitle } from "./pageTitles";
 import styles from "./AppHeader.module.css";
+
+function readIsAdminHeader(): boolean {
+  try {
+    const currentUser = JSON.parse(localStorage.getItem("current_user") || "null") as {
+      role?: string;
+      tenantId?: number;
+    } | null;
+    const tenantId = Number(currentUser?.tenantId ?? localStorage.getItem("tenant_id") ?? "1");
+    return isAdminRole(currentUser?.role, tenantId);
+  } catch {
+    return Number(localStorage.getItem("tenant_id") || "1") === 1;
+  }
+}
 
 type NotificationItem = {
   id: number;
@@ -23,6 +38,7 @@ type Props = {
 export default function AppHeader({ sidebarCollapsed, onSidebarToggle }: Props) {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const isAdmin = readIsAdminHeader();
   const [isDark, setIsDark] = useState(
     () => typeof window !== "undefined" && localStorage.getItem("theme") === "dark",
   );
@@ -113,6 +129,8 @@ export default function AppHeader({ sidebarCollapsed, onSidebarToggle }: Props) 
       </div>
 
       <div className={styles.actions}>
+        {isAdmin ? <AdminHeaderChatActions /> : null}
+
         <Link to="/profile?tab=tickets" className={styles.ticketLink} aria-label="Destek talebi aç" title="Destek Talebi Aç">
           <span>Ticket Aç</span>
           <Ticket className={styles.ticketIcon} aria-hidden />

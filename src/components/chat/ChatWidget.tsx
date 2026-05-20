@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Headphones, MessageSquare, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiClient as apiJson } from "@/api/apiClient";
 import { apiClient, API_BASE_URL } from "@/utils/apiClient";
 import { isAdminRole } from "@/shared/utils/profilePicture";
+import { useChatTypingEmitter } from "@/hooks/useChatTypingEmitter";
+import TypingIndicator from "@/components/chat/TypingIndicator";
 import styles from "./ChatWidget.module.css";
 
 const POLL_INTERVAL = 5000;
+const CHAT_POLL_INTERVAL = 3000;
 const MINIMIZED_STORAGE_KEY = "chatWidgetMinimized";
 
 function readMinimizedFromStorage(): boolean {
@@ -89,6 +93,7 @@ export default function ChatWidget() {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [adminTyping, setAdminTyping] = useState(false);
 
   const [offlineName, setOfflineName] = useState("");
   const [offlineEmail, setOfflineEmail] = useState("");
@@ -162,9 +167,11 @@ export default function ChatWidget() {
       const data = (await res.json()) as {
         conversation?: { id?: string };
         messages?: ChatMessage[];
+        adminTyping?: boolean;
       };
       const cid = data?.conversation?.id || null;
       setConversationId(cid);
+      setAdminTyping(!!data?.adminTyping);
 
       if (data?.messages?.length) {
         setMessages(data.messages);
@@ -174,11 +181,16 @@ export default function ChatWidget() {
       if (cid) {
         const msgRes = await apiClient(`/api/chat/messages?conversationId=${encodeURIComponent(cid)}`);
         if (msgRes.ok) {
-          const msgData = (await msgRes.json()) as { messages?: ChatMessage[] };
+          const msgData = (await msgRes.json()) as {
+            messages?: ChatMessage[];
+            adminTyping?: boolean;
+          };
           setMessages(msgData?.messages || []);
+          setAdminTyping(!!msgData?.adminTyping);
         }
       } else {
         setMessages([]);
+        setAdminTyping(false);
       }
     } catch {
       setLoadError("Sohbet geçmişi yüklenemedi. Lütfen tekrar deneyin.");
@@ -200,13 +212,42 @@ export default function ChatWidget() {
       const data = (await res.json()) as {
         conversation?: { id?: string };
         messages?: ChatMessage[];
+        adminTyping?: boolean;
       };
       setMessages(data?.messages || []);
+      setAdminTyping(!!data?.adminTyping);
       if (!conversationId && data?.conversation?.id) {
         setConversationId(data.conversation.id);
       }
     } catch {
       /* sessiz yenileme */
+    }
+  }, [token, open, conversationId, isOnline]);
+
+  const loadTypingStatus = useCallback(async () => {
+    if (!token || !open || !isOnline) return;
+
+    let cid = conversationId;
+    if (!cid) {
+      try {
+        const res = await apiClient("/api/chat/conversation");
+        if (!res.ok) return;
+        const d = (await res.json()) as { conversation?: { id?: string } };
+        cid = d?.conversation?.id || null;
+        if (cid) setConversationId(cid);
+      } catch {
+        return;
+      }
+    }
+    if (!cid) return;
+
+    try {
+      const data = await apiJson<{ adminTyping?: boolean }>(
+        `/api/chat/typing-status?conversationId=${encodeURIComponent(cid)}`,
+      );
+      setAdminTyping(!!data?.adminTyping);
+    } catch {
+      /* sessiz */
     }
   }, [token, open, conversationId, isOnline]);
 
@@ -234,13 +275,45 @@ export default function ChatWidget() {
     if (!open || !isOnline) {
       return;
     }
-    const t = setInterval(() => void loadMessages(), POLL_INTERVAL);
-    return () => clearInterval(t);
-  }, [open, isOnline, loadMessages]);
+    void loadTypingStatus();
+    const msgTimer = setInterval(() => void loadMessages(), CHAT_POLL_INTERVAL);
+    const typingTimer = setInterval(() => void loadTypingStatus(), CHAT_POLL_INTERVAL);
+    return () => {
+      clearInterval(msgTimer);
+      clearInterval(typingTimer);
+    };
+  }, [open, isOnline, loadMessages, loadTypingStatus]);
+
+  const sendUserTyping = useCallback(
+    async (typing: boolean) => {
+      let cid = conversationId;
+      if (!cid) {
+        try {
+          const d = await apiJson<{ conversation?: { id?: string } }>("/api/chat/conversation");
+          cid = d?.conversation?.id || null;
+          if (cid) setConversationId(cid);
+        } catch {
+          return;
+        }
+      }
+      if (!cid) return;
+      await apiJson("/api/chat/typing", {
+        method: "POST",
+        body: JSON.stringify({ conversationId: cid, typing }),
+      });
+    },
+    [conversationId],
+  );
+
+  const { notifyTyping, stopTyping } = useChatTypingEmitter({
+    enabled: isOnline && open,
+    conversationId,
+    sendTyping: sendUserTyping,
+  });
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, open, offlineSubmitState]);
+  }, [messages, open, offlineSubmitState, adminTyping]);
 
   const sendMessage = async () => {
     const text = input.trim().slice(0, 1000);
@@ -268,6 +341,7 @@ export default function ChatWidget() {
       return;
     }
 
+    stopTyping();
     setSending(true);
     try {
       const res = await apiClient("/api/chat/message", {
@@ -278,6 +352,8 @@ export default function ChatWidget() {
         const data = (await res.json()) as { message: ChatMessage };
         setMessages((prev) => [...prev, data.message]);
         setInput("");
+        setAdminTyping(false);
+        void loadTypingStatus();
       }
     } finally {
       setSending(false);
@@ -580,11 +656,17 @@ export default function ChatWidget() {
               <footer className={styles.footer}>
                 {isOnline ? (
                   <>
+                    {adminTyping ? (
+                      <TypingIndicator label="Destek ekibi yazıyor" className={styles.typingHint} />
+                    ) : null}
                     <div className={styles.footerRow}>
                       <input
                         type="text"
                         value={input}
-                        onChange={(e) => setInput(e.target.value.slice(0, 1000))}
+                        onChange={(e) => {
+                          setInput(e.target.value.slice(0, 1000));
+                          notifyTyping();
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) {
                             e.preventDefault();
