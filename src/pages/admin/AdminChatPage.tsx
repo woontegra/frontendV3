@@ -19,6 +19,7 @@ import { emitAdminChatReplySent } from "@/shared/utils/adminChatNotificationBrid
 
 const POLL_INTERVAL = 5000;
 const CHAT_POLL_INTERVAL = 3000;
+const TYPING_POLL_INTERVAL = 2000;
 const PRESENCE_HEARTBEAT = 60 * 1000;
 
 interface ChatMessage {
@@ -72,6 +73,7 @@ export default function AdminChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const selectedId = selected?.id ?? null;
+  const showUserTyping = userTyping || !!selected?.isUserTyping;
 
   const loadMyPresence = useCallback(async () => {
     try {
@@ -110,7 +112,9 @@ export default function AdminChatPage() {
       setConversations(list);
       setSelected((prev) => {
         if (!prev) return null;
-        return list.find((c) => c.id === prev.id) ?? prev;
+        const next = list.find((c) => c.id === prev.id) ?? prev;
+        setUserTyping(!!next.isUserTyping);
+        return next;
       });
     } catch (error) {
       setListError(getErrorMessage(error));
@@ -146,6 +150,12 @@ export default function AdminChatPage() {
       /* sessiz */
     }
   }, [selectedId]);
+
+  useEffect(() => {
+    if (selected?.isUserTyping) {
+      setUserTyping(true);
+    }
+  }, [selected?.isUserTyping]);
 
   const handleRefresh = useCallback(async () => {
     if (!hasAccessToken()) {
@@ -220,7 +230,6 @@ export default function AdminChatPage() {
 
   const { notifyTyping, stopTyping } = useChatTypingEmitter({
     enabled: isOnline && !!selectedId,
-    conversationId: selectedId,
     sendTyping: sendAdminTyping,
   });
 
@@ -241,7 +250,7 @@ export default function AdminChatPage() {
     void run();
 
     const msgTimer = setInterval(() => void loadMessages(selectedId), CHAT_POLL_INTERVAL);
-    const typingTimer = setInterval(() => void loadTypingStatus(selectedId), CHAT_POLL_INTERVAL);
+    const typingTimer = setInterval(() => void loadTypingStatus(selectedId), TYPING_POLL_INTERVAL);
     return () => {
       cancelled = true;
       clearInterval(msgTimer);
@@ -251,7 +260,7 @@ export default function AdminChatPage() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
-  }, [messages, userTyping]);
+  }, [messages, showUserTyping]);
 
   useEffect(() => {
     if (!isOnline || !hasAccessToken()) return;
@@ -483,7 +492,7 @@ export default function AdminChatPage() {
 
                 <div
                   ref={scrollRef}
-                  className="flex-1 overflow-y-auto p-4 space-y-3"
+                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 space-y-3"
                 >
                   {messagesError ? (
                     <p className="text-sm text-red-600 dark:text-red-400" role="alert">
@@ -501,13 +510,13 @@ export default function AdminChatPage() {
                       className={`flex ${m.senderType === "admin" ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`max-w-[80%] px-3 py-2 rounded-lg text-sm ${
+                        className={`max-w-[82%] min-w-0 px-3 py-2 rounded-lg text-sm break-words [overflow-wrap:anywhere] ${
                           m.senderType === "admin"
                             ? "bg-indigo-600 text-white"
                             : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                         }`}
                       >
-                        <p>{m.message}</p>
+                        <p className="break-words [overflow-wrap:anywhere]">{m.message}</p>
                         <p className="text-[10px] opacity-80 mt-0.5">
                           {new Date(m.createdAt).toLocaleString("tr-TR", {
                             dateStyle: "short",
@@ -519,14 +528,14 @@ export default function AdminChatPage() {
                   ))}
                 </div>
 
-                <div className="p-3 border-t border-gray-200 dark:border-gray-800">
-                  {userTyping ? (
+                <div className="shrink-0 p-3 border-t border-gray-200 dark:border-gray-800 overflow-hidden">
+                  {showUserTyping ? (
                     <TypingIndicator
-                      label="Kullanıcı yazıyor"
-                      className="text-xs text-gray-500 dark:text-gray-400 mb-2"
+                      label="Kullanıcı yazıyor…"
+                      className="text-xs text-gray-600 dark:text-gray-300 mb-2 font-medium"
                     />
                   ) : null}
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 min-w-0 w-full">
                     <input
                       type="text"
                       value={input}
@@ -534,6 +543,7 @@ export default function AdminChatPage() {
                         setInput(e.target.value.slice(0, 1000));
                         notifyTyping();
                       }}
+                      onFocus={() => void loadTypingStatus(selectedId ?? undefined)}
                       onKeyDown={(e) => e.key === "Enter" && void handleSend()}
                       placeholder="Yanıt yazın..."
                       maxLength={1000}

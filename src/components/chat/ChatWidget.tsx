@@ -10,6 +10,7 @@ import styles from "./ChatWidget.module.css";
 
 const POLL_INTERVAL = 5000;
 const CHAT_POLL_INTERVAL = 3000;
+const TYPING_POLL_INTERVAL = 2000;
 const MINIMIZED_STORAGE_KEY = "chatWidgetMinimized";
 
 function readMinimizedFromStorage(): boolean {
@@ -245,9 +246,21 @@ export default function ChatWidget() {
       const data = await apiJson<{ adminTyping?: boolean }>(
         `/api/chat/typing-status?conversationId=${encodeURIComponent(cid)}`,
       );
-      setAdminTyping(!!data?.adminTyping);
+      const typing = !!data?.adminTyping;
+      setAdminTyping(typing);
     } catch {
-      /* sessiz */
+      /* sessiz — mesaj yanıtından yedek */
+      try {
+        const msgRes = conversationId
+          ? await apiClient(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`)
+          : await apiClient("/api/chat/conversation");
+        if (msgRes.ok) {
+          const payload = (await msgRes.json()) as { adminTyping?: boolean };
+          setAdminTyping(!!payload?.adminTyping);
+        }
+      } catch {
+        /* sessiz */
+      }
     }
   }, [token, open, conversationId, isOnline]);
 
@@ -277,7 +290,7 @@ export default function ChatWidget() {
     }
     void loadTypingStatus();
     const msgTimer = setInterval(() => void loadMessages(), CHAT_POLL_INTERVAL);
-    const typingTimer = setInterval(() => void loadTypingStatus(), CHAT_POLL_INTERVAL);
+    const typingTimer = setInterval(() => void loadTypingStatus(), TYPING_POLL_INTERVAL);
     return () => {
       clearInterval(msgTimer);
       clearInterval(typingTimer);
@@ -307,7 +320,6 @@ export default function ChatWidget() {
 
   const { notifyTyping, stopTyping } = useChatTypingEmitter({
     enabled: isOnline && open,
-    conversationId,
     sendTyping: sendUserTyping,
   });
 
@@ -509,7 +521,8 @@ export default function ChatWidget() {
               </div>
             </header>
 
-            <div ref={scrollRef} className={styles.body}>
+            <div className={styles.contentColumn}>
+              <div ref={scrollRef} className={styles.messageScroll}>
               {offlineSubmitState === "success" && isOfflineMode ? (
                 <div className={styles.successScreen}>
                   <CheckCircle2 className={styles.successIcon} aria-hidden />
@@ -650,6 +663,7 @@ export default function ChatWidget() {
                   </div>
                 </form>
               )}
+              </div>
             </div>
 
             {!(offlineSubmitState === "success" && isOfflineMode) && (
@@ -657,7 +671,7 @@ export default function ChatWidget() {
                 {isOnline ? (
                   <>
                     {adminTyping ? (
-                      <TypingIndicator label="Destek ekibi yazıyor" className={styles.typingHint} />
+                      <TypingIndicator label="Destek ekibi yazıyor…" className={styles.typingHint} />
                     ) : null}
                     <div className={styles.footerRow}>
                       <input
@@ -667,6 +681,7 @@ export default function ChatWidget() {
                           setInput(e.target.value.slice(0, 1000));
                           notifyTyping();
                         }}
+                        onFocus={() => void loadTypingStatus()}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) {
                             e.preventDefault();
