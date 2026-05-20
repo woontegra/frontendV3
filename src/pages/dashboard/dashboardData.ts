@@ -30,6 +30,7 @@ export type UserInfo = {
   id: number;
   email: string;
   name?: string;
+  createdAt?: string;
   subscriptionType?: string;
   subscriptionStartsAt?: string;
   subscriptionEndsAt?: string;

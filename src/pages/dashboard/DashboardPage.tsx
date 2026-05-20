@@ -30,6 +30,11 @@ import {
 } from "./calculationTypeLabels";
 import CalculationTypeDistributionChart from "./CalculationTypeDistributionChart";
 import {
+  buildMonthlyChartBuckets,
+  filterMonthKeysFromAccount,
+  getChartAccountStart,
+} from "./dashboardChartAxis";
+import {
   loadDashboardData,
   readDashboardUserRole,
   type SavedCase,
@@ -233,6 +238,7 @@ export default function DashboardPage() {
   const barData = useMemo(() => {
     const now = new Date();
     const getDateStr = (c: SavedCase) => c.created_at || c.createdAt || "";
+    const accountStart = getChartAccountStart(userInfo);
 
     if (period === "haftalik") {
       const getWeekStart = (d: Date) => {
@@ -243,10 +249,21 @@ export default function DashboardPage() {
       };
       const keys: string[] = [];
       const counts: Record<string, number> = {};
+      const accountWeekStart = accountStart
+        ? (() => {
+            const d = new Date(accountStart);
+            const day = d.getDay() || 7;
+            d.setDate(d.getDate() - day + 1);
+            return getWeekStart(d);
+          })()
+        : null;
       for (let i = 6; i >= 0; i -= 1) {
         const d = new Date(now);
         d.setDate(d.getDate() - 7 * i);
         const key = getWeekStart(d);
+        if (accountWeekStart && key < accountWeekStart) {
+          continue;
+        }
         keys.push(key);
         counts[key] = 0;
       }
@@ -264,6 +281,11 @@ export default function DashboardPage() {
           /* ignore invalid dates */
         }
       });
+      if (keys.length === 0) {
+        const key = getWeekStart(now);
+        keys.push(key);
+        counts[key] = 0;
+      }
       return keys.map((key) => {
         const [, month, day] = key.split("-").map(Number);
         return { name: `${day}.${month}`, Adet: counts[key] };
@@ -310,28 +332,21 @@ export default function DashboardPage() {
           /* ignore invalid dates */
         }
       });
-      return Object.entries(map)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .slice(-12)
-        .map(([key, adet]) => {
-          const [, month] = key.split("-").map(Number);
-          return { name: `${MONTHS[month - 1]} ${key.slice(0, 4)}`, Adet: adet };
-        });
+      const sortedKeys = filterMonthKeysFromAccount(
+        Object.keys(map).sort((a, b) => a.localeCompare(b)),
+        userInfo,
+      );
+      return sortedKeys.slice(-12).map((key) => {
+        const [, month] = key.split("-").map(Number);
+        return { name: `${MONTHS[month - 1]} ${key.slice(0, 4)}`, Adet: map[key] };
+      });
     }
 
-    const months: Array<{ key: string; month: number }> = [];
+    const months = buildMonthlyChartBuckets(now, userInfo);
     const counts: Record<string, number> = {};
-    for (let i = 6; i >= 0; i -= 1) {
-      let month = now.getMonth() - i;
-      let year = now.getFullYear();
-      while (month < 0) {
-        month += 12;
-        year -= 1;
-      }
-      const key = `${year}-${String(month + 1).padStart(2, "0")}`;
-      months.push({ key, month });
+    months.forEach(({ key }) => {
       counts[key] = 0;
-    }
+    });
     savedCases.forEach((c) => {
       const source = getDateStr(c);
       if (!source) {
@@ -348,7 +363,7 @@ export default function DashboardPage() {
       }
     });
     return months.map(({ key, month }) => ({ name: MONTHS[month], Adet: counts[key] }));
-  }, [savedCases, period]);
+  }, [savedCases, period, userInfo]);
 
   const recentRows = useMemo(() => buildRecentRows(savedCases), [savedCases]);
 
@@ -561,15 +576,19 @@ export default function DashboardPage() {
             </select>
           </div>
           <div className={styles.cardContent}>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={barData} margin={{ top: 5, right: 10, left: -15, bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-40} textAnchor="end" height={55} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                <ReTooltip contentStyle={{ fontSize: "12px" }} cursor={{ fill: "rgba(96,165,250,0.1)" }} />
-                <Bar dataKey="Adet" fill="#60A5FA" name="Hesaplama" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {savedCases.length === 0 ? (
+              <div className={styles.empty}>Henüz hesaplama kaydı yok</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={barData} margin={{ top: 5, right: 10, left: -15, bottom: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-40} textAnchor="end" height={55} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                  <ReTooltip contentStyle={{ fontSize: "12px" }} cursor={{ fill: "rgba(96,165,250,0.1)" }} />
+                  <Bar dataKey="Adet" fill="#60A5FA" name="Hesaplama" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       </div>
