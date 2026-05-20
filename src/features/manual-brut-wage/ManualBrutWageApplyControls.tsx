@@ -81,8 +81,7 @@ export function ManualBrutWageApplyControls({
     <>
       <div className={styles.bar}>
         <p className={styles.hint}>
-          Kayıtlı şablondaki dönem brüt ücretlerini tablodaki eşleşen satırlara uygular. Diğer alanlar değişince
-          manuel ücretler korunur. Manuel brüt aktifken aynı düğmeye tekrar basarak asgari ücrete dönebilirsiniz.
+          Kayıtlı şablondaki dönem brüt ücretlerini tablodaki eşleşen satırlara uygular.
         </p>
         <button
           type="button"
