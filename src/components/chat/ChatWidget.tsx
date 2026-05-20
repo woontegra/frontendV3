@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CheckCircle2, Headphones, MessageSquare, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { apiClient as apiJson } from "@/api/apiClient";
 import { apiClient, API_BASE_URL } from "@/utils/apiClient";
 import { isAdminRole } from "@/shared/utils/profilePicture";
 import { useChatTypingEmitter } from "@/hooks/useChatTypingEmitter";
 import TypingIndicator from "@/components/chat/TypingIndicator";
+import {
+  fetchUserAdminTyping,
+  postUserTyping,
+  resolveConversationId,
+} from "@/components/chat/chatTypingApi";
 import styles from "./ChatWidget.module.css";
 
 const POLL_INTERVAL = 5000;
-const CHAT_POLL_INTERVAL = 3000;
-const TYPING_POLL_INTERVAL = 2000;
+const CHAT_POLL_INTERVAL = 2000;
 const MINIMIZED_STORAGE_KEY = "chatWidgetMinimized";
 
 function readMinimizedFromStorage(): boolean {
@@ -104,7 +108,21 @@ export default function ChatWidget() {
   const [offlineSubmitState, setOfflineSubmitState] = useState<SubmitState>("idle");
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const conversationIdRef = useRef<string | null>(null);
   const token = access.token;
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   /** Yalnızca presence API başarılı ve admin online ise canlı chat */
   const isOnline = presenceMode === "online";
@@ -172,6 +190,7 @@ export default function ChatWidget() {
       };
       const cid = data?.conversation?.id || null;
       setConversationId(cid);
+      conversationIdRef.current = cid;
       setAdminTyping(!!data?.adminTyping);
 
       if (data?.messages?.length) {
@@ -216,51 +235,18 @@ export default function ChatWidget() {
         adminTyping?: boolean;
       };
       setMessages(data?.messages || []);
-      setAdminTyping(!!data?.adminTyping);
+      if (typeof data?.adminTyping === "boolean") {
+        setAdminTyping(data.adminTyping);
+      } else if (data?.conversation?.id) {
+        const remote = await fetchUserAdminTyping(data.conversation.id);
+        if (remote !== null) setAdminTyping(remote);
+      }
       if (!conversationId && data?.conversation?.id) {
         setConversationId(data.conversation.id);
+        conversationIdRef.current = data.conversation.id;
       }
     } catch {
       /* sessiz yenileme */
-    }
-  }, [token, open, conversationId, isOnline]);
-
-  const loadTypingStatus = useCallback(async () => {
-    if (!token || !open || !isOnline) return;
-
-    let cid = conversationId;
-    if (!cid) {
-      try {
-        const res = await apiClient("/api/chat/conversation");
-        if (!res.ok) return;
-        const d = (await res.json()) as { conversation?: { id?: string } };
-        cid = d?.conversation?.id || null;
-        if (cid) setConversationId(cid);
-      } catch {
-        return;
-      }
-    }
-    if (!cid) return;
-
-    try {
-      const data = await apiJson<{ adminTyping?: boolean }>(
-        `/api/chat/typing-status?conversationId=${encodeURIComponent(cid)}`,
-      );
-      const typing = !!data?.adminTyping;
-      setAdminTyping(typing);
-    } catch {
-      /* sessiz — mesaj yanıtından yedek */
-      try {
-        const msgRes = conversationId
-          ? await apiClient(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`)
-          : await apiClient("/api/chat/conversation");
-        if (msgRes.ok) {
-          const payload = (await msgRes.json()) as { adminTyping?: boolean };
-          setAdminTyping(!!payload?.adminTyping);
-        }
-      } catch {
-        /* sessiz */
-      }
     }
   }, [token, open, conversationId, isOnline]);
 
@@ -288,35 +274,22 @@ export default function ChatWidget() {
     if (!open || !isOnline) {
       return;
     }
-    void loadTypingStatus();
     const msgTimer = setInterval(() => void loadMessages(), CHAT_POLL_INTERVAL);
-    const typingTimer = setInterval(() => void loadTypingStatus(), TYPING_POLL_INTERVAL);
-    return () => {
-      clearInterval(msgTimer);
-      clearInterval(typingTimer);
-    };
-  }, [open, isOnline, loadMessages, loadTypingStatus]);
+    return () => clearInterval(msgTimer);
+  }, [open, isOnline, loadMessages]);
 
-  const sendUserTyping = useCallback(
-    async (typing: boolean) => {
-      let cid = conversationId;
-      if (!cid) {
-        try {
-          const d = await apiJson<{ conversation?: { id?: string } }>("/api/chat/conversation");
-          cid = d?.conversation?.id || null;
-          if (cid) setConversationId(cid);
-        } catch {
-          return;
-        }
+  const sendUserTyping = useCallback(async (typing: boolean) => {
+    let cid = conversationIdRef.current;
+    if (!cid) {
+      cid = await resolveConversationId();
+      if (cid) {
+        setConversationId(cid);
+        conversationIdRef.current = cid;
       }
-      if (!cid) return;
-      await apiJson("/api/chat/typing", {
-        method: "POST",
-        body: JSON.stringify({ conversationId: cid, typing }),
-      });
-    },
-    [conversationId],
-  );
+    }
+    if (!cid) return;
+    await postUserTyping(cid, typing);
+  }, []);
 
   const { notifyTyping, stopTyping } = useChatTypingEmitter({
     enabled: isOnline && open,
@@ -344,6 +317,7 @@ export default function ChatWidget() {
         cid = d?.conversation?.id || null;
         if (cid) {
           setConversationId(cid);
+          conversationIdRef.current = cid;
         }
       } catch {
         return;
@@ -365,7 +339,6 @@ export default function ChatWidget() {
         setMessages((prev) => [...prev, data.message]);
         setInput("");
         setAdminTyping(false);
-        void loadTypingStatus();
       }
     } finally {
       setSending(false);
@@ -486,7 +459,8 @@ export default function ChatWidget() {
       )}
       </div>
 
-      {open && (
+      {open &&
+        createPortal(
         <div className={styles.overlay}>
           <div className={styles.backdrop} onClick={() => setOpen(false)} aria-hidden />
           <div
@@ -516,7 +490,7 @@ export default function ChatWidget() {
                   Gizle
                 </button>
                 <button type="button" className={styles.closeBtn} onClick={() => setOpen(false)} aria-label="Kapat">
-                  <X className="w-4 h-4" />
+                  <X className={styles.closeIcon} aria-hidden />
                 </button>
               </div>
             </header>
@@ -671,7 +645,9 @@ export default function ChatWidget() {
                 {isOnline ? (
                   <>
                     {adminTyping ? (
-                      <TypingIndicator label="Destek ekibi yazıyor…" className={styles.typingHint} />
+                      <div className={styles.typingBar} role="status" aria-live="polite">
+                        <TypingIndicator label="Destek ekibi yazıyor…" className={styles.typingHint} />
+                      </div>
                     ) : null}
                     <div className={styles.footerRow}>
                       <input
@@ -681,7 +657,6 @@ export default function ChatWidget() {
                           setInput(e.target.value.slice(0, 1000));
                           notifyTyping();
                         }}
-                        onFocus={() => void loadTypingStatus()}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) {
                             e.preventDefault();
@@ -690,19 +665,24 @@ export default function ChatWidget() {
                         }}
                         placeholder="Mesajınızı yazın…"
                         maxLength={1000}
-                        className={styles.fieldInput}
+                        enterKeyHint="send"
+                        autoComplete="off"
+                        className={`${styles.fieldInput} ${styles.footerInput}`}
                       />
-                      <Button
+                      <button
                         type="button"
-                        size="icon"
                         onClick={() => void sendMessage()}
                         disabled={!input.trim() || sending}
                         className={styles.sendBtn}
+                        aria-label="Gönder"
                       >
-                        <Send className="w-4 h-4" />
-                      </Button>
+                        <Send className={styles.sendIcon} aria-hidden />
+                      </button>
                     </div>
-                    <p className={styles.helpText}>Enter ile gönderebilirsiniz.</p>
+                    <p className={styles.helpText}>
+                      <span className={styles.helpTextFull}>Enter ile gönderebilirsiniz.</span>
+                      <span className={styles.helpTextShort}>Enter = gönder</span>
+                    </p>
                   </>
                 ) : (
                   <>
@@ -720,7 +700,8 @@ export default function ChatWidget() {
               </footer>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

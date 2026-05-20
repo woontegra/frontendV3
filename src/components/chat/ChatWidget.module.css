@@ -227,6 +227,8 @@
   justify-content: flex-end;
   padding: 0 24px 96px;
   pointer-events: none;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .backdrop {
@@ -241,12 +243,14 @@
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  width: 100%;
-  max-width: 26rem;
+  width: min(26rem, 100%);
+  max-width: min(26rem, calc(100vw - 48px));
+  min-width: 0;
   height: min(82vh, 34rem);
   max-height: 34rem;
   border-radius: 1.1rem;
   overflow: hidden;
+  overflow-x: hidden;
   box-sizing: border-box;
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -321,6 +325,8 @@
   font-size: 0.74rem;
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.88);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .statusBadge {
@@ -386,6 +392,12 @@
   flex-shrink: 0;
 }
 
+.closeIcon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
 .closeBtn:hover {
   background: rgba(255, 255, 255, 0.24);
 }
@@ -402,8 +414,11 @@
 .messageScroll {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 1rem;
   background: #f8fafc;
   box-sizing: border-box;
@@ -636,12 +651,15 @@
 
 .footer {
   flex-shrink: 0;
-  padding: 0.85rem 1rem 1rem;
+  padding: 0.75rem 0.85rem 0.85rem;
   border-top: 1px solid #e2e8f0;
   background: #fff;
   overflow: hidden;
+  overflow-x: hidden;
   box-sizing: border-box;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 :global(.dark) .footer {
@@ -651,27 +669,57 @@
 
 .footerRow {
   display: flex;
+  flex-direction: row;
+  align-items: center;
   gap: 0.5rem;
   width: 100%;
   min-width: 0;
+  max-width: 100%;
   box-sizing: border-box;
   overflow: hidden;
 }
 
-.footerRow .fieldInput {
-  flex: 1;
+.footerRow .fieldInput,
+.footerInput {
+  flex: 1 1 0%;
   min-width: 0;
-  max-width: 100%;
+  width: auto;
+  max-width: none;
+  height: 2.75rem;
+  box-sizing: border-box;
 }
 
 .sendBtn {
-  border-radius: 0.6rem;
+  flex: 0 0 2.75rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 2.75rem;
+  max-width: 2.75rem;
+  border: none;
+  border-radius: 0.65rem;
   background: #4f46e5;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-.sendBtn:hover {
+.sendBtn:hover:not(:disabled) {
   background: #4338ca;
+}
+
+.sendBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sendIcon {
+  width: 1rem;
+  height: 1rem;
 }
 
 .submitBtn {
@@ -692,15 +740,31 @@
   line-height: 1.35;
 }
 
+.helpTextShort {
+  display: none;
+}
+
+.typingBar {
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
 .typingHint {
-  margin: 0 0 0.5rem;
-  padding: 0.25rem 0;
-  color: #475569 !important;
+  margin: 0 0 0.45rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.5rem;
+  background: #eef2ff;
+  color: #4338ca !important;
   font-weight: 600;
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 :global(.dark) .typingHint {
-  color: #cbd5e1 !important;
+  background: rgba(79, 70, 229, 0.2);
+  color: #c7d2fe !important;
 }
 
 .alertError {
@@ -771,6 +835,110 @@
   }
 }
 
+@media (max-width: 640px) {
+  .overlay {
+    padding: 0 12px 84px;
+    justify-content: center;
+    align-items: flex-end;
+  }
+
+  .panel {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    height: min(620px, calc(100vh - 110px));
+    max-height: min(620px, calc(100vh - 110px));
+    border-radius: 1rem;
+    margin: 0 auto;
+  }
+
+  .header {
+    padding: 0.75rem 0.85rem 0.7rem;
+    gap: 0.5rem;
+  }
+
+  .brandMark {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.65rem;
+  }
+
+  .headerTitle {
+    font-size: 0.92rem;
+  }
+
+  .headerSubtitle {
+    font-size: 0.68rem;
+    margin-top: 0.15rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .statusBadge {
+    margin-top: 0.35rem;
+    font-size: 0.62rem;
+  }
+
+  .messageScroll {
+    padding: 0.75rem;
+  }
+
+  .bubbleUser,
+  .bubbleAdmin {
+    max-width: 78%;
+  }
+
+  .footer {
+    padding: 0.55rem 0.65rem 0.65rem;
+  }
+
+  .footerRow {
+    gap: 0.5rem;
+  }
+
+  .footerRow .fieldInput,
+  .footerInput {
+    height: 2.75rem;
+    font-size: 1rem;
+    padding: 0.5rem 0.65rem;
+  }
+
+  .sendBtn {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    border-radius: 0.65rem;
+  }
+
+  .sendIcon {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  .helpText {
+    margin-top: 0.3rem;
+    font-size: 0.6rem;
+    line-height: 1.25;
+  }
+
+  .helpTextFull {
+    display: none;
+  }
+
+  .helpTextShort {
+    display: inline;
+  }
+
+  .typingHint {
+    margin-bottom: 0.35rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.78rem;
+  }
+}
+
 @media (max-width: 480px) {
   .launcherTitle {
     font-size: 0.76rem;
@@ -778,18 +946,5 @@
 
   .launcherTag {
     font-size: 0.64rem;
-  }
-
-  .overlay {
-    padding: 0 0 84px;
-    align-items: flex-end;
-  }
-
-  .panel {
-    max-width: 100%;
-    width: 100%;
-    height: min(72vh, calc(100vh - 84px - 1rem));
-    max-height: calc(100vh - 84px - 1rem);
-    border-radius: 1rem 1rem 0 0;
   }
 }

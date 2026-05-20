@@ -229,7 +229,7 @@ export default function AdminChatPage() {
   );
 
   const { notifyTyping, stopTyping } = useChatTypingEmitter({
-    enabled: isOnline && !!selectedId,
+    enabled: !!selectedId,
     sendTyping: sendAdminTyping,
   });
 
