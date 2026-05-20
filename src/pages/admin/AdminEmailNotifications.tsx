@@ -11,6 +11,11 @@ import { Mail, Send, Users, Clock, CheckCircle, XCircle, ListX, RotateCcw, Image
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiClient } from "@/utils/apiClient";
+import {
+  DEMO_OFFER_MAIL_TEMPLATE,
+  USER_MAIL_AUTO_VARS_HINT,
+  USER_MAIL_MANUAL_VARS_HINT,
+} from "@/pages/admin/sharedUserMailTemplates";
 
 type BarAssociation = {
   id: number;
@@ -153,6 +158,14 @@ Saygılarımızla,
 Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
 
 {{open_tracking_pixel}}`,
+    },
+    {
+      name: DEMO_OFFER_MAIL_TEMPLATE.name,
+      description: DEMO_OFFER_MAIL_TEMPLATE.description,
+      templateId: DEMO_OFFER_MAIL_TEMPLATE.templateId,
+      recipientType: DEMO_OFFER_MAIL_TEMPLATE.recipientType,
+      subject: DEMO_OFFER_MAIL_TEMPLATE.subject,
+      message: DEMO_OFFER_MAIL_TEMPLATE.message,
     },
   ];
 
@@ -1002,6 +1015,9 @@ Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
               <p>• Özel listede virgül veya satır sonu kullanabilirsiniz</p>
               <p>• Kara listedeki adreslere otomatik gönderilmez</p>
               <p>• Email ayarları .env dosyasında yapılmalıdır</p>
+              <p className="pt-1 border-t border-gray-200 dark:border-gray-700 mt-2">
+                Demo teklif şablonu seçildiğinde alıcı grubu Deneme Kullanıcıları olur. Otomatik: {USER_MAIL_AUTO_VARS_HINT}. Manuel: {USER_MAIL_MANUAL_VARS_HINT}
+              </p>
             </CardContent>
           </Card>
         </div>

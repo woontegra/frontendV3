@@ -34,6 +34,14 @@ import {
 } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import DeviceManagerModal from "@/components/modals/DeviceManagerModal";
+import {
+  DEMO_OFFER_MAIL_TEMPLATE,
+  findMailPlaceholders,
+  MAIL_PLACEHOLDER_VALIDATION_MSG,
+  resolvePanelMailLogoUrl,
+  USER_MAIL_AUTO_VARS_HINT,
+  USER_MAIL_MANUAL_VARS_HINT,
+} from "@/pages/admin/sharedUserMailTemplates";
 
 type TabKey = "genel" | "abonelikLisans" | "kullanim" | "girisCihaz" | "demoTakibi" | "islemGecmisi" | "destek";
 
@@ -65,26 +73,83 @@ interface UserDetailData {
   ipLoginHistory: Array<{ ip: string | null; at: string; userAgent?: string | null }>;
 }
 
-type MailTemplateKey = "demo" | "license" | "video" | "custom";
+type MailTemplateKey = "demo" | "demoOffer" | "license" | "video" | "custom";
+
+type MailAutoTemplateVars = {
+  adSoyad: string;
+  email: string;
+  abonelik: string;
+  bitisTarihi: string;
+  kalanGun: string;
+  sirket: string;
+};
+
+function buildMailAutoTemplateVars(detail: UserDetailData | null): MailAutoTemplateVars {
+  const u = detail?.user;
+  const sub = detail?.subscription;
+  const lic = detail?.license;
+  const endDate = sub?.endDate ?? lic?.bitis ?? null;
+  const remaining = sub?.remainingDays ?? lic?.remainingDays ?? null;
+
+  return {
+    adSoyad: u?.name?.trim() || "Değerli Kullanıcımız",
+    email: u?.email?.trim() || "",
+    abonelik: sub?.type ? getSubscriptionTypeLabel(sub.type) : "-",
+    bitisTarihi: endDate ? fmtDate(endDate) : "-",
+    kalanGun: remaining != null ? String(remaining) : "-",
+    sirket: u?.company?.trim() || "",
+  };
+}
+
+/** Yalnızca kullanıcı verisinden gelen alanlar; indirimLinki / sonTarih admin tarafından elle doldurulur */
+function applyAutoMailTemplateVars(text: string, vars: MailAutoTemplateVars): string {
+  return text
+    .replace(/\{\{adSoyad\}\}/gi, vars.adSoyad)
+    .replace(/\{\{email\}\}/gi, vars.email)
+    .replace(/\{\{abonelik\}\}/gi, vars.abonelik)
+    .replace(/\{\{bitisTarihi\}\}/gi, vars.bitisTarihi)
+    .replace(/\{\{kalanGun\}\}/gi, vars.kalanGun)
+    .replace(/\{\{sirket\}\}/gi, vars.sirket);
+}
+
+function prepareMailContentForSend(
+  subject: string,
+  message: string,
+  detail: UserDetailData | null
+): { subject: string; message: string; unresolved: string[] } {
+  const vars = buildMailAutoTemplateVars(detail);
+  const preparedSubject = applyAutoMailTemplateVars(subject, vars);
+  const preparedMessage = applyAutoMailTemplateVars(message, vars);
+  const unresolved = [
+    ...findMailPlaceholders(preparedSubject),
+    ...findMailPlaceholders(preparedMessage),
+  ].filter((v, i, arr) => arr.indexOf(v) === i);
+  return { subject: preparedSubject, message: preparedMessage, unresolved };
+}
 
 const MAIL_TEMPLATES: Record<MailTemplateKey, { label: string; subject: string; message: string }> = {
   demo: {
     label: "Demo Hatırlatma",
     subject: "Demo süreniz ve hızlı başlangıç önerileri",
     message:
-      "Merhaba,\n\nDemo hesabınızı daha verimli kullanabilmeniz için hızlı başlangıç adımlarını hatırlatmak istedik.\n\nİyi çalışmalar dileriz.",
+      "Sayın {{adSoyad}},\n\nDemo hesabınızı daha verimli kullanabilmeniz için hızlı başlangıç adımlarını hatırlatmak istedik.\n\nAbonelik: {{abonelik}}\nBitiş: {{bitisTarihi}} (kalan gün: {{kalanGun}})\n\nİyi çalışmalar dileriz.",
+  },
+  demoOffer: {
+    label: DEMO_OFFER_MAIL_TEMPLATE.name,
+    subject: DEMO_OFFER_MAIL_TEMPLATE.subject,
+    message: DEMO_OFFER_MAIL_TEMPLATE.message,
   },
   license: {
     label: "Lisans Bitiş Hatırlatma",
     subject: "Lisans süreniz yakında sona eriyor",
     message:
-      "Merhaba,\n\nLisans sürenizin yakında sona ereceğini hatırlatmak isteriz. Kesintisiz kullanım için lisansınızı uzatabilirsiniz.\n\nİyi çalışmalar dileriz.",
+      "Sayın {{adSoyad}},\n\nLisans sürenizin yakında sona ereceğini hatırlatmak isteriz ({{bitisTarihi}}, kalan: {{kalanGun}} gün). Kesintisiz kullanım için lisansınızı uzatabilirsiniz.\n\nİyi çalışmalar dileriz.",
   },
   video: {
     label: "Kullanım Videosu",
     subject: "Program kullanım videosu",
     message:
-      "Merhaba,\n\nProgramı daha hızlı kullanabilmeniz için eğitim videosunu paylaşmak isteriz:\nhttps://www.youtube.com/@bilirkisihesap\n\nİyi çalışmalar dileriz.",
+      "Sayın {{adSoyad}},\n\nProgramı daha hızlı kullanabilmeniz için eğitim videosunu paylaşmak isteriz:\nhttps://www.youtube.com/@bilirkisihesap\n\nİyi çalışmalar dileriz.",
   },
   custom: {
     label: "Özel Mesaj",
@@ -300,18 +365,23 @@ export default function AdminUserDetailPage() {
     }
   };
 
-  const openMailModal = () => {
-    setMailTo(user?.email || "");
-    setMailTemplate("demo");
-    setMailSubject(MAIL_TEMPLATES.demo.subject);
-    setMailMessage(MAIL_TEMPLATES.demo.message);
-    setMailModalOpen(true);
+  const fillMailFromTemplate = (tpl: MailTemplateKey) => {
+    const raw = MAIL_TEMPLATES[tpl];
+    setMailTemplate(tpl);
+    if (tpl === "custom") {
+      setMailSubject(raw.subject);
+      setMailMessage(raw.message);
+      return;
+    }
+    const vars = buildMailAutoTemplateVars(data);
+    setMailSubject(applyAutoMailTemplateVars(raw.subject, vars));
+    setMailMessage(applyAutoMailTemplateVars(raw.message, vars));
   };
 
-  const applyMailTemplate = (tpl: MailTemplateKey) => {
-    setMailTemplate(tpl);
-    setMailSubject(MAIL_TEMPLATES[tpl].subject);
-    setMailMessage(MAIL_TEMPLATES[tpl].message);
+  const openMailModal = () => {
+    setMailTo(user?.email || "");
+    fillMailFromTemplate("demo");
+    setMailModalOpen(true);
   };
 
   const sendSingleMail = async () => {
@@ -324,6 +394,20 @@ export default function AdminUserDetailPage() {
       toastError("Eksik alan", "Konu ve mesaj alanları zorunludur");
       return;
     }
+
+    const { subject: preparedSubject, message: preparedMessage, unresolved } = prepareMailContentForSend(
+      mailSubject.trim(),
+      mailMessage.trim(),
+      data
+    );
+    if (unresolved.length > 0) {
+      toastError("Eksik alanlar", MAIL_PLACEHOLDER_VALIDATION_MSG);
+      return;
+    }
+
+    setMailSubject(preparedSubject);
+    setMailMessage(preparedMessage);
+
     setMailSending(true);
     try {
       const res = await apiClient("/api/email-notifications/send-bulk", {
@@ -331,9 +415,12 @@ export default function AdminUserDetailPage() {
         headers: { "Content-Type": "application/json", "x-user-role": "admin" },
         body: JSON.stringify({
           recipientType: "custom",
-          customEmails: [to],
-          subject: mailSubject.trim(),
-          message: mailMessage,
+          customEmails: [{ email: to, name: user?.name?.trim() || "" }],
+          recipientDisplayName: data?.user?.name?.trim() || "",
+          subject: preparedSubject,
+          message: preparedMessage,
+          template: mailTemplate === "demoOffer" ? DEMO_OFFER_MAIL_TEMPLATE.templateId : "custom",
+          logoUrl: mailTemplate === "demoOffer" ? resolvePanelMailLogoUrl() : undefined,
         }),
       });
       const body = await res.json().catch(() => null);
@@ -1247,22 +1334,34 @@ export default function AdminUserDetailPage() {
               <select
                 id="mail-template"
                 value={mailTemplate}
-                onChange={(e) => applyMailTemplate(e.target.value as MailTemplateKey)}
+                onChange={(e) => fillMailFromTemplate(e.target.value as MailTemplateKey)}
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="demo">{MAIL_TEMPLATES.demo.label}</option>
-                <option value="license">{MAIL_TEMPLATES.license.label}</option>
-                <option value="video">{MAIL_TEMPLATES.video.label}</option>
-                <option value="custom">{MAIL_TEMPLATES.custom.label}</option>
+                {(Object.keys(MAIL_TEMPLATES) as MailTemplateKey[]).map((key) => (
+                  <option key={key} value={key}>
+                    {MAIL_TEMPLATES[key].label}
+                  </option>
+                ))}
               </select>
+              <p className="text-xs text-muted-foreground">
+                Otomatik: {USER_MAIL_AUTO_VARS_HINT}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Manuel (göndermeden önce doldurun): {USER_MAIL_MANUAL_VARS_HINT}
+              </p>
             </div>
+            {mailTemplate === "demoOffer" && (
+              <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
+                İndirim linki ve son tarih otomatik oluşturulmaz. Website/ödeme tarafında oluşturduğunuz bağlantıyı ve geçerlilik tarihini göndermeden önce manuel yazın.
+              </p>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="mail-subject">Konu</Label>
               <Input id="mail-subject" value={mailSubject} onChange={(e) => setMailSubject(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="mail-message">Mesaj</Label>
-              <Textarea id="mail-message" rows={8} value={mailMessage} onChange={(e) => setMailMessage(e.target.value)} />
+              <Textarea id="mail-message" rows={14} value={mailMessage} onChange={(e) => setMailMessage(e.target.value)} />
             </div>
           </div>
           <DialogFooter>
