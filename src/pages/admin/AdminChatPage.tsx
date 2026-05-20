@@ -13,13 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/api/apiClient";
-import TypingIndicator from "@/components/chat/TypingIndicator";
-import { useChatTypingEmitter } from "@/hooks/useChatTypingEmitter";
 import { emitAdminChatReplySent } from "@/shared/utils/adminChatNotificationBridge";
 
 const POLL_INTERVAL = 5000;
 const CHAT_POLL_INTERVAL = 3000;
-const TYPING_POLL_INTERVAL = 2000;
 const PRESENCE_HEARTBEAT = 60 * 1000;
 
 interface ChatMessage {
@@ -42,7 +39,6 @@ interface Conversation {
   user: { id: number; name: string; email: string };
   assignedAdmin: { id: number; name: string; email: string } | null;
   unreadCount: number;
-  isUserTyping?: boolean;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -69,11 +65,9 @@ export default function AdminChatPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [messagesError, setMessagesError] = useState<string | null>(null);
-  const [userTyping, setUserTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const selectedId = selected?.id ?? null;
-  const showUserTyping = userTyping || !!selected?.isUserTyping;
 
   const loadMyPresence = useCallback(async () => {
     try {
@@ -112,9 +106,7 @@ export default function AdminChatPage() {
       setConversations(list);
       setSelected((prev) => {
         if (!prev) return null;
-        const next = list.find((c) => c.id === prev.id) ?? prev;
-        setUserTyping(!!next.isUserTyping);
-        return next;
+        return list.find((c) => c.id === prev.id) ?? prev;
       });
     } catch (error) {
       setListError(getErrorMessage(error));
@@ -127,35 +119,14 @@ export default function AdminChatPage() {
 
     try {
       setMessagesError(null);
-      const data = await apiClient<{ messages?: ChatMessage[]; userTyping?: boolean }>(
+      const data = await apiClient<{ messages?: ChatMessage[] }>(
         `/api/admin/chat/messages/${id}`,
       );
       setMessages(data?.messages ?? []);
-      setUserTyping(!!data?.userTyping);
     } catch (error) {
       setMessagesError(getErrorMessage(error));
     }
   }, [selectedId]);
-
-  const loadTypingStatus = useCallback(async (conversationId?: string) => {
-    const id = conversationId ?? selectedId;
-    if (!id || !hasAccessToken()) return;
-
-    try {
-      const data = await apiClient<{ userTyping?: boolean }>(
-        `/api/admin/chat/typing-status/${id}`,
-      );
-      setUserTyping(!!data?.userTyping);
-    } catch {
-      /* sessiz */
-    }
-  }, [selectedId]);
-
-  useEffect(() => {
-    if (selected?.isUserTyping) {
-      setUserTyping(true);
-    }
-  }, [selected?.isUserTyping]);
 
   const handleRefresh = useCallback(async () => {
     if (!hasAccessToken()) {
@@ -180,11 +151,10 @@ export default function AdminChatPage() {
         if (updated) {
           setSelected(updated);
         }
-        const msgData = await apiClient<{ messages?: ChatMessage[]; userTyping?: boolean }>(
+        const msgData = await apiClient<{ messages?: ChatMessage[] }>(
           `/api/admin/chat/messages/${activeId}`,
         );
         setMessages(msgData?.messages ?? []);
-        setUserTyping(!!msgData?.userTyping);
       } else {
         setSelected((prev) => {
           if (!prev) return null;
@@ -217,50 +187,31 @@ export default function AdminChatPage() {
     };
   }, [loadConversations]);
 
-  const sendAdminTyping = useCallback(
-    async (typing: boolean) => {
-      if (!selectedId) return;
-      await apiClient("/api/admin/chat/typing", {
-        method: "POST",
-        body: JSON.stringify({ conversationId: selectedId, typing }),
-      });
-    },
-    [selectedId],
-  );
-
-  const { notifyTyping, stopTyping } = useChatTypingEmitter({
-    enabled: !!selectedId,
-    sendTyping: sendAdminTyping,
-  });
-
   useEffect(() => {
     if (!selectedId) {
       setMessages([]);
       setMessagesError(null);
-      setUserTyping(false);
       return;
     }
 
     let cancelled = false;
     const run = async () => {
       setMessagesLoading(true);
-      await Promise.all([loadMessages(selectedId), loadTypingStatus(selectedId)]);
+      await loadMessages(selectedId);
       if (!cancelled) setMessagesLoading(false);
     };
     void run();
 
     const msgTimer = setInterval(() => void loadMessages(selectedId), CHAT_POLL_INTERVAL);
-    const typingTimer = setInterval(() => void loadTypingStatus(selectedId), TYPING_POLL_INTERVAL);
     return () => {
       cancelled = true;
       clearInterval(msgTimer);
-      clearInterval(typingTimer);
     };
-  }, [selectedId, loadMessages, loadTypingStatus]);
+  }, [selectedId, loadMessages]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
-  }, [messages, showUserTyping]);
+  }, [messages]);
 
   useEffect(() => {
     if (!isOnline || !hasAccessToken()) return;
@@ -300,7 +251,6 @@ export default function AdminChatPage() {
   const handleSend = async () => {
     const text = input.trim().slice(0, 1000);
     if (!text || !selectedId || sending) return;
-    stopTyping();
     setSending(true);
     try {
       const data = await apiClient<{ message?: ChatMessage }>("/api/admin/chat/message", {
@@ -311,7 +261,6 @@ export default function AdminChatPage() {
         const sent = data.message as ChatMessage;
         setMessages((prev) => [...prev, sent]);
         setInput("");
-        setUserTyping(false);
         emitAdminChatReplySent({
           conversationId: selectedId,
           lastMessageAt: sent.createdAt ?? new Date().toISOString(),
@@ -448,13 +397,9 @@ export default function AdminChatPage() {
                       {c.user?.email}
                     </p>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                      {c.isUserTyping ? (
-                        <span className="text-indigo-600 dark:text-indigo-400">yazıyor…</span>
-                      ) : c.lastMessageAt ? (
-                        new Date(c.lastMessageAt).toLocaleString("tr-TR")
-                      ) : (
-                        "Henüz mesaj yok"
-                      )}
+                      {c.lastMessageAt
+                        ? new Date(c.lastMessageAt).toLocaleString("tr-TR")
+                        : "Henüz mesaj yok"}
                     </p>
                   </button>
                 ))
@@ -529,21 +474,11 @@ export default function AdminChatPage() {
                 </div>
 
                 <div className="shrink-0 p-3 border-t border-gray-200 dark:border-gray-800 overflow-hidden">
-                  {showUserTyping ? (
-                    <TypingIndicator
-                      label="Kullanıcı yazıyor…"
-                      className="text-xs text-gray-600 dark:text-gray-300 mb-2 font-medium"
-                    />
-                  ) : null}
                   <div className="flex gap-2 min-w-0 w-full">
                     <input
                       type="text"
                       value={input}
-                      onChange={(e) => {
-                        setInput(e.target.value.slice(0, 1000));
-                        notifyTyping();
-                      }}
-                      onFocus={() => void loadTypingStatus(selectedId ?? undefined)}
+                      onChange={(e) => setInput(e.target.value.slice(0, 1000))}
                       onKeyDown={(e) => e.key === "Enter" && void handleSend()}
                       placeholder="Yanıt yazın..."
                       maxLength={1000}
