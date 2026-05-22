@@ -2,6 +2,8 @@
  * Kıdem Tazminatı (İş Kanununa Göre) - yardımcı fonksiyonlar
  */
 
+import { calcWorkPeriodDisplay } from "@/utils/dateUtils";
+
 export const KIDEM_TAVAN_DONEMLERI = [
   { start: "01.01.2004", end: "30.06.2004", tavan: 1485430000 / 1000000 },
   { start: "01.07.2004", end: "31.12.2004", tavan: 1574740000 / 1000000 },
@@ -106,8 +108,11 @@ export function calcWorkPeriodBilirKisi(
       years--;
       months += 12;
     }
-    return { years, months, days, label: `${years} Yıl ${months} Ay ${days} Gün` };
+    const label = calcWorkPeriodDisplay(startDate, endDate).label;
+    return { years, months, days, label };
   } catch {
     return { years: 0, months: 0, days: 0, label: "0 Yıl 0 Ay 0 Gün" };
   }
 }
+
+export { calcWorkPeriodDisplay } from "@/utils/dateUtils";

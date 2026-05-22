@@ -1,5 +1,33 @@
 export type WorkPeriod = { years: number; months: number; days: number; totalDays: number; label: string };
 
+export type WorkPeriodDisplay = { years: number; months: number; days: number; label: string };
+
+/**
+ * Çalışma süresi metinsel gösterimi (Yıl / Ay / Gün).
+ * Bitiş tarihine +1 gün eklenmez — yalnızca ekran ve rapor etiketleri için.
+ * Kıdem, ihbar, FM vb. hesap motorları calcWorkPeriodBilirKisi kullanmaya devam eder.
+ */
+export function calcWorkPeriodDisplay(startISO?: string, endISO?: string): WorkPeriodDisplay {
+  if (!startISO || !endISO) return { years: 0, months: 0, days: 0, label: "0 Yıl 0 Ay 0 Gün" };
+  const start = new Date(startISO);
+  const end = new Date(endISO);
+  if (Number.isNaN(+start) || Number.isNaN(+end) || end < start) {
+    return { years: 0, months: 0, days: 0, label: "0 Yıl 0 Ay 0 Gün" };
+  }
+  let years = end.getFullYear() - start.getFullYear();
+  let months = end.getMonth() - start.getMonth();
+  let days = end.getDate() - start.getDate();
+  if (days < 0) {
+    months--;
+    days += new Date(end.getFullYear(), end.getMonth(), 0).getDate();
+  }
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  return { years, months, days, label: `${years} Yıl ${months} Ay ${days} Gün` };
+}
+
 /** ISO (YYYY-MM-DD) → Türkçe tarih (GG.AA.YYYY). Geçersiz/boş girişte "-" döner. */
 export function isoToTR(iso?: string): string {
   if (!iso) return "-";
@@ -49,17 +77,16 @@ export function calcWorkPeriodBilirKisi(startISO?: string, endISO?: string): Wor
   if (days >= 30) { days -= 30; months += 1; }
   if (months >= 12) { months -= 12; years += 1; }
 
-  const label = `${years} yıl ${months} ay ${days} gün`;
+  const label = calcWorkPeriodDisplay(startISO, endISO).label;
   const totalDays = years * 365 + months * 30 + days; // referans amaçlı
   return { years, months, days, totalDays, label };
 }
 
-// Returns only the formatted label (e.g., "1 yıl 11 ay 15 gün")
+// Returns only the formatted label (e.g., "2 Yıl 0 Ay 20 Gün")
 export function calculateWorkPeriod(startDate: Date | string, endDate: Date | string): string {
   const s = typeof startDate === 'string' ? startDate : (startDate as Date)?.toISOString().slice(0,10);
   const e = typeof endDate === 'string' ? endDate : (endDate as Date)?.toISOString().slice(0,10);
-  const wp = calcWorkPeriodBilirKisi(s as string, e as string);
-  return wp.label;
+  return calcWorkPeriodDisplay(s as string, e as string).label;
 }
 
 /** Geçersiz günü ayın son geçerli gününe indirger (örn. 31.11 → 30.11). ISO string'i parse edip günü clamp'ler. */

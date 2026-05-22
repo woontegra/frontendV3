@@ -458,7 +458,7 @@ export default function IhbarMevsimPage() {
     } else showToastError("Silme başarısız");
   };
 
-  const calismaSuresiLabel = `${totals.yil} Yıl ${totals.ay} Ay ${totals.gun} Gün`;
+  const calismaSuresiLabel = diff.label;
 
   const wordTableSections = useMemo(() => {
     const s: Array<{ id: string; title: string; html: string; htmlForPdf: string }> = [];

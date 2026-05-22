@@ -355,10 +355,12 @@ export default function KidemMevsimlikPage() {
         label: `${fmt(kullanilacakBrutUcret)} / 12 × ${totals.ay} ay`,
         value: fmtCurrency(kh.ayTutar),
       });
-    kidemRows.push({
-      label: `${fmt(kullanilacakBrutUcret)} / 360 × ${totals.gun} gün`,
-      value: fmtCurrency(kh.gunTutar),
-    });
+    if (totals.gun > 0) {
+      kidemRows.push({
+        label: `${fmt(kullanilacakBrutUcret)} / 360 × ${totals.gun} gün`,
+        value: fmtCurrency(kh.gunTutar),
+      });
+    }
     kidemRows.push({ label: "Toplam Kıdem Tazminatı", value: fmtCurrency(brutNetDisplay) });
     const nKidem = adaptToWordTable(kidemRows);
     s.push({ id: "kidem-hesaplama", title: "Kıdem Tazminatı Hesaplaması", html: buildWordTable(nKidem.headers, nKidem.rows), htmlForPdf: buildStyledReportTable(nKidem.headers, nKidem.rows, { lastRowBg: "blue" }) });
@@ -601,7 +603,12 @@ export default function KidemMevsimlikPage() {
                 <div className="p-2.5 space-y-1 text-xs">
                   {totals.yil > 0 && <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600"><span>{fmt(kullanilacakBrutUcret)} × {totals.yil} yıl</span><span>{fmtCurrency(kidemHesaplama.yilTutar)}</span></div>}
                   {totals.ay > 0 && <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600"><span>{fmt(kullanilacakBrutUcret)} / 12 × {totals.ay} ay</span><span>{fmtCurrency(kidemHesaplama.ayTutar)}</span></div>}
-                  <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600"><span>{fmt(kullanilacakBrutUcret)} / 360 × {totals.gun} gün</span><span>{fmtCurrency(kidemHesaplama.gunTutar)}</span></div>
+                  {totals.gun > 0 && (
+                    <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600">
+                      <span>{fmt(kullanilacakBrutUcret)} / 360 × {totals.gun} gün</span>
+                      <span>{fmtCurrency(kidemHesaplama.gunTutar)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between pt-1.5 font-semibold text-indigo-600 dark:text-indigo-400"><span>Toplam Kıdem Tazminatı</span><span>{fmtCurrency(brutNetDisplay)}</span></div>
                 </div>
               </div>

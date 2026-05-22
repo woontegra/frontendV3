@@ -11,6 +11,7 @@ import { useToast } from "@/context/ToastContext";
 import { useKaydetContext } from "@/core/kaydet/KaydetProvider";
 import { usePageStyle } from "@/hooks/usePageStyle";
 import { apiClient } from "@/utils/apiClient";
+import { calcWorkPeriodDisplay } from "@/utils/dateUtils";
 import KidemTazminatiForm from "@/calculations/kidem-tazminati/KidemTazminatiForm";
 import type { ExtraItem } from "@/calculations/kidem-tazminati/contract";
 import { ReportContentFromConfig } from "@/components/report";
@@ -366,10 +367,7 @@ export default function IsAramaIzniUcretiPage() {
   const isAramaReportConfig = useMemo((): ReportConfig => {
     const fmtLocal = (n: number) =>
       n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const workPeriodLabel =
-      totals.yil > 0 || totals.ay > 0 || totals.gun > 0
-        ? `${totals.yil || 0} Yıl, ${totals.ay || 0} Ay, ${totals.gun || 0} Gün`
-        : "-";
+    const workPeriodLabel = calcWorkPeriodDisplay(liveForm?.iseGiris, liveForm?.istenCikis).label || "-";
 
     return {
       title: PAGE_HEADING,

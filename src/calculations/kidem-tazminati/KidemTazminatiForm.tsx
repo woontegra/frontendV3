@@ -4,7 +4,8 @@
  */
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { calcWorkPeriodBilirKisi, parseMoney } from "./utils";
+import { parseMoney } from "./utils";
+import { calcWorkPeriodDisplay } from "@/utils/dateUtils";
 import { useToast } from "@/context/ToastContext";
 import {
   getAllExtraCalculationsSets,
@@ -216,7 +217,7 @@ export default function KidemTazminatiForm({
   }, [iseGiris, denemeSuresiGun]);
 
   const diff = useMemo(() => {
-    const wp = calcWorkPeriodBilirKisi(adjustedIseGiris, istenCikis);
+    const wp = calcWorkPeriodDisplay(adjustedIseGiris, istenCikis);
     return { yil: wp.years, ay: wp.months, gun: wp.days, label: wp.label };
   }, [adjustedIseGiris, istenCikis]);
 

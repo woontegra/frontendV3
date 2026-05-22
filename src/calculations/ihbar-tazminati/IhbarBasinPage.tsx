@@ -438,7 +438,7 @@ export default function IhbarBasinPage() {
     } else showToastError("Silme başarısız");
   };
 
-  const calismaSuresiLabel = `${totals.yil} Yıl ${totals.ay} Ay ${totals.gun} Gün`;
+  const calismaSuresiLabel = diff.label;
   const kidemSuresiLabel = hasBasinKidem
     ? `${kidemDiff.years} Yıl ${kidemDiff.months} Ay ${kidemDiff.days} Gün`
     : "—";

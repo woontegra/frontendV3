@@ -20,7 +20,7 @@ import {
   deleteExtraCalculationsSet,
   type SavedExtraCalculationsSet,
 } from "./storage";
-import { calcWorkPeriodBilirKisi, parseMoney } from "./utils";
+import { parseMoney } from "./utils";
 import { getAsgariUcretByDate } from "@modules/fazla-mesai/shared";
 import { useKidem30State } from "./state";
 import {
@@ -35,7 +35,7 @@ import { fmtCurrency, parseNum, fmt } from "./calculations";
 import { downloadPdfFromDOM } from "@/utils/pdfExport";
 import { adaptToWordTable } from "@/utils/wordTableAdapter";
 import { buildWordTable } from "@/utils/wordTableBuilder";
-import { isoToTR } from "@/utils/dateUtils";
+import { calcWorkPeriodDisplay, isoToTR } from "@/utils/dateUtils";
 import { buildStyledReportTable } from "@/utils/styledReportTable";
 import { copySectionForWord } from "@/utils/copyTableForWord";
 
@@ -105,7 +105,7 @@ export default function Kidem30Page() {
   const effectiveExitDate = exitDate || istenCikis || "";
 
   const diff = useMemo(
-    () => calcWorkPeriodBilirKisi(iseGiris, istenCikis),
+    () => calcWorkPeriodDisplay(iseGiris, istenCikis),
     [iseGiris, istenCikis]
   );
 
@@ -372,7 +372,12 @@ export default function Kidem30Page() {
     const kidemHesaplama: { label: string; value: string }[] = [];
     if (totals.yil > 0) kidemHesaplama.push({ label: `${fmt(kullanilacakBrutUcret)} × ${totals.yil} yıl`, value: fmtCurrency(kullanilacakBrutUcret * totals.yil) });
     if (totals.ay > 0) kidemHesaplama.push({ label: `${fmt(kullanilacakBrutUcret)} / 12 × ${totals.ay} ay`, value: fmtCurrency((kullanilacakBrutUcret / 12) * totals.ay) });
-    kidemHesaplama.push({ label: `${fmt(kullanilacakBrutUcret)} / 365 × ${totals.gun} gün`, value: fmtCurrency((kullanilacakBrutUcret / 365) * totals.gun) });
+    if (totals.gun > 0) {
+      kidemHesaplama.push({
+        label: `${fmt(kullanilacakBrutUcret)} / 365 × ${totals.gun} gün`,
+        value: fmtCurrency((kullanilacakBrutUcret / 365) * totals.gun),
+      });
+    }
     kidemHesaplama.push({ label: "Toplam Kıdem Tazminatı", value: fmtCurrency(brutNetDisplay) });
     const nKidem = adaptToWordTable(kidemHesaplama);
     s.push({ id: "kidem-hesaplama", title: "Kıdem Tazminatı Hesaplaması", html: buildWordTable(nKidem.headers, nKidem.rows), htmlForPdf: buildStyledReportTable(nKidem.headers, nKidem.rows, { lastRowBg: "blue" }) });
@@ -534,7 +539,12 @@ export default function Kidem30Page() {
                 <div className="p-2.5 space-y-1 text-xs">
                   {totals.yil > 0 && <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600"><span>{fmt(kullanilacakBrutUcret)} × {totals.yil} yıl</span><span>{fmtCurrency(kullanilacakBrutUcret * totals.yil)}</span></div>}
                   {totals.ay > 0 && <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600"><span>{fmt(kullanilacakBrutUcret)} / 12 × {totals.ay} ay</span><span>{fmtCurrency((kullanilacakBrutUcret / 12) * totals.ay)}</span></div>}
-                  <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600"><span>{fmt(kullanilacakBrutUcret)} / 365 × {totals.gun} gün</span><span>{fmtCurrency((kullanilacakBrutUcret / 365) * totals.gun)}</span></div>
+                  {totals.gun > 0 && (
+                    <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600">
+                      <span>{fmt(kullanilacakBrutUcret)} / 365 × {totals.gun} gün</span>
+                      <span>{fmtCurrency((kullanilacakBrutUcret / 365) * totals.gun)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between pt-1.5 font-semibold text-indigo-600 dark:text-indigo-400"><span>Toplam Kıdem Tazminatı</span><span>{fmtCurrency(brutNetDisplay)}</span></div>
                 </div>
               </div>

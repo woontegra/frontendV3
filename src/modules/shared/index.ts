@@ -10,6 +10,7 @@ export { API_BASE_URL, apiClient, apiPost } from "@/utils/apiClient";
 export {
   calculateWorkPeriod,
   calculateWeeksBetweenDates,
+  calcWorkPeriodDisplay,
   clampToLastDayOfMonth,
 } from "@/utils/dateUtils";
 export { getScopedStorageKey } from "@/utils/storageKey";
