@@ -75,14 +75,9 @@ export default function ProfileHeader() {
         const { apiClient } = await import("@/utils/apiClient");
         const tenantId = localStorage.getItem("tenant_id") || "1";
         const token = localStorage.getItem("access_token");
-        let res = await apiClient(`/api/auth/me?email=${encodeURIComponent(user.email!)}`, {
+        const res = await apiClient(`/api/auth/me?email=${encodeURIComponent(user.email!)}`, {
           headers: { "x-tenant-id": tenantId, Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) {
-          res = await apiClient(`/api/admin/users/email/${encodeURIComponent(user.email!)}`, {
-            headers: { "x-tenant-id": tenantId, Authorization: `Bearer ${token}`, "x-user-role": "admin" },
-          });
-        }
         if (!res.ok) return;
         const data = await res.json();
         setSubscriptionEndsAt(data.subscriptionEndsAt || null);

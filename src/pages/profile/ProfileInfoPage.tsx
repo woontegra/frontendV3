@@ -7,6 +7,59 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { apiClient } from "@/utils/apiClient";
 
+function parseProfileUser(payload: Record<string, unknown>) {
+  const nested = payload.data as Record<string, unknown> | undefined;
+  const user = (nested?.user ?? payload) as Record<string, unknown>;
+  return {
+    id: typeof user.id === "number" ? user.id : undefined,
+    name: typeof user.name === "string" ? user.name : "",
+    email: typeof user.email === "string" ? user.email : "",
+    phone: typeof user.phone === "string" ? user.phone : "",
+    company: typeof user.company === "string" ? user.company : "",
+    role: typeof user.role === "string" ? user.role : undefined,
+  };
+}
+
+function profileAuthHeaders() {
+  const token = localStorage.getItem("access_token");
+  const tenantId = localStorage.getItem("tenant_id") || "1";
+  return {
+    "x-tenant-id": tenantId,
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+function syncProfileToClient(
+  profile: ReturnType<typeof parseProfileUser>,
+  user: ReturnType<typeof useAuth>["user"],
+  setUser: ReturnType<typeof useAuth>["setUser"],
+) {
+  setUser({
+    ...user,
+    id: profile.id ?? user?.id,
+    name: profile.name,
+    email: profile.email || user?.email,
+    phone: profile.phone,
+    company: profile.company,
+  });
+  const currentUser = JSON.parse(localStorage.getItem("current_user") || "{}");
+  localStorage.setItem(
+    "current_user",
+    JSON.stringify({
+      ...currentUser,
+      id: profile.id ?? currentUser.id,
+      name: profile.name,
+      email: profile.email || currentUser.email,
+      phone: profile.phone,
+      company: profile.company,
+      role: profile.role || user?.role || currentUser.role,
+    }),
+  );
+  if (profile.email) {
+    localStorage.setItem("email", profile.email);
+  }
+}
+
 export default function ProfileInfoPage() {
   const { user, setUser } = useAuth();
   const { success, error } = useToast();
@@ -19,62 +72,40 @@ export default function ProfileInfoPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const emailToLoad = user?.email || localStorage.getItem("email");
-    if (!emailToLoad) {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
       const currentUser = JSON.parse(localStorage.getItem("current_user") || "{}");
       setFormData({
         name: user?.name || currentUser.name || "",
         email: user?.email || currentUser.email || localStorage.getItem("email") || "",
-        phone: (user as any)?.phone || currentUser.phone || "",
-        company: (user as any)?.company || currentUser.company || "",
+        phone: (user as { phone?: string })?.phone || currentUser.phone || "",
+        company: (user as { company?: string })?.company || currentUser.company || "",
       });
       return;
     }
+
     const loadUserData = async () => {
       try {
-        const token = localStorage.getItem("access_token");
-        const tenantId = localStorage.getItem("tenant_id") || "1";
-        const response = await apiClient(`/api/admin/users/email/${encodeURIComponent(emailToLoad)}`, {
-          headers: {
-            "x-tenant-id": tenantId,
-            Authorization: `Bearer ${token}`,
-            "x-user-role": "admin",
-          },
+        const response = await apiClient("/api/user/profile", {
+          headers: profileAuthHeaders(),
         });
         if (response.ok) {
-          const userData = await response.json();
+          const payload = await response.json();
+          const profile = parseProfileUser(payload);
           setFormData({
-            name: userData.name || "",
-            email: userData.email || "",
-            phone: userData.phone || "",
-            company: userData.company || "",
+            name: profile.name,
+            email: profile.email,
+            phone: profile.phone,
+            company: profile.company,
           });
-          setUser({
-            ...user,
-            id: userData.id,
-            name: userData.name,
-            email: userData.email,
-            phone: userData.phone,
-            company: userData.company,
-          });
-          localStorage.setItem(
-            "current_user",
-            JSON.stringify({
-              id: userData.id,
-              name: userData.name,
-              email: userData.email,
-              phone: userData.phone,
-              company: userData.company,
-              role: user?.role || "admin",
-            })
-          );
+          syncProfileToClient(profile, user, setUser);
         } else {
           const currentUser = JSON.parse(localStorage.getItem("current_user") || "{}");
           setFormData({
             name: user?.name || currentUser.name || "",
-            email: user?.email || currentUser.email || emailToLoad,
-            phone: (user as any)?.phone || currentUser.phone || "",
-            company: (user as any)?.company || currentUser.company || "",
+            email: user?.email || currentUser.email || localStorage.getItem("email") || "",
+            phone: (user as { phone?: string })?.phone || currentUser.phone || "",
+            company: (user as { company?: string })?.company || currentUser.company || "",
           });
         }
       } catch {
@@ -82,8 +113,8 @@ export default function ProfileInfoPage() {
         setFormData({
           name: user?.name || currentUser.name || "",
           email: user?.email || currentUser.email || localStorage.getItem("email") || "",
-          phone: (user as any)?.phone || currentUser.phone || "",
-          company: (user as any)?.company || currentUser.company || "",
+          phone: (user as { phone?: string })?.phone || currentUser.phone || "",
+          company: (user as { company?: string })?.company || currentUser.company || "",
         });
       }
     };
@@ -97,30 +128,20 @@ export default function ProfileInfoPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const emailToUse = formData.email || user?.email || localStorage.getItem("email");
-    if (!emailToUse) {
-      error("Email bilgisi bulunamadı. Lütfen email adresinizi girin.");
-      return;
-    }
     if (!formData.name) {
       error("Ad Soyad alanı zorunludur.");
       return;
     }
     setIsLoading(true);
     try {
-      const token = localStorage.getItem("access_token");
-      const tenantId = localStorage.getItem("tenant_id") || "1";
-      const response = await apiClient(`/api/admin/users/email/${encodeURIComponent(emailToUse)}`, {
+      const response = await apiClient("/api/user/profile", {
         method: "PUT",
         headers: {
+          ...profileAuthHeaders(),
           "Content-Type": "application/json",
-          "x-tenant-id": tenantId,
-          Authorization: `Bearer ${token}`,
-          "x-user-role": "admin",
         },
         body: JSON.stringify({
           name: formData.name,
-          email: formData.email,
           phone: formData.phone,
           company: formData.company,
         }),
@@ -129,36 +150,19 @@ export default function ProfileInfoPage() {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || errorData.details || "Profil güncellenirken bir hata oluştu");
       }
-      const updatedUser = await response.json();
-      setUser({
-        ...user,
-        id: updatedUser.id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        phone: updatedUser.phone,
-        company: updatedUser.company,
-      });
-      const currentUser = JSON.parse(localStorage.getItem("current_user") || "{}");
-      localStorage.setItem(
-        "current_user",
-        JSON.stringify({
-          ...currentUser,
-          id: updatedUser.id,
-          name: updatedUser.name,
-          email: updatedUser.email,
-          phone: updatedUser.phone,
-          company: updatedUser.company,
-        })
-      );
+      const payload = await response.json();
+      const profile = parseProfileUser(payload);
+      syncProfileToClient(profile, user, setUser);
       setFormData({
-        name: updatedUser.name,
-        email: updatedUser.email,
-        phone: updatedUser.phone || "",
-        company: updatedUser.company || "",
+        name: profile.name,
+        email: profile.email || formData.email,
+        phone: profile.phone || "",
+        company: profile.company || "",
       });
       success("Profil bilgileri başarıyla güncellendi");
-    } catch (err: any) {
-      error(err.message || "Profil güncellenirken bir hata oluştu");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Profil güncellenirken bir hata oluştu";
+      error(message);
     } finally {
       setIsLoading(false);
     }
@@ -206,9 +210,9 @@ export default function ProfileInfoPage() {
                   name="email"
                   type="email"
                   value={formData.email}
-                  onChange={handleChange}
+                  readOnly
                   placeholder="ornek@email.com"
-                  required
+                  className="bg-gray-50 dark:bg-gray-900"
                 />
               </div>
               <div className="space-y-2">

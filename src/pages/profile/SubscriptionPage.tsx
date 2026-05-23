@@ -32,14 +32,9 @@ export default function SubscriptionPage() {
     try {
       setLoading(true);
       const email = encodeURIComponent(user.email);
-      let response = await apiClient(`/api/auth/me?email=${email}`, {
+      const response = await apiClient(`/api/auth/me?email=${email}`, {
         headers: { "x-tenant-id": String(tenantId), Authorization: `Bearer ${token}` },
       });
-      if (!response.ok) {
-        response = await apiClient(`/api/admin/users/email/${email}`, {
-          headers: { "x-tenant-id": String(tenantId), Authorization: `Bearer ${token}`, "x-user-role": "admin" },
-        });
-      }
       if (!response.ok) throw new Error("Abonelik bilgileri yüklenemedi");
       const data = await response.json();
       setSubscriptionData({
