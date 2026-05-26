@@ -7,24 +7,32 @@ const cards = [
     to: "/icra-takip-brutten-nete/damga-vergisi-kesintili",
     icon: BadgePercent,
     color: "emerald",
+    usage:
+      "Kıdem Tazminatı (İş Kanunu, Mevsimlik, Kısmi Süreli), Prim Alacağı, Kötü Niyet Tazminatı, İşe Başlatmama Tazminatı, Haksız Fesih Tazminatı ve Ayrımcılık Tazminatı hesaplamalarında kullanılır.",
   },
   {
     title: "Gelir Vergisi ve Damga Vergisi Kesintili",
     to: "/icra-takip-brutten-nete/gelir-ve-damga-vergisi-kesintili",
     icon: Calculator,
     color: "blue",
+    usage:
+      "İhbar Tazminatı (tüm alt türler) ile Kıdem Tazminatı (Gemi Adamları, Basın İş) hesaplamalarında kullanılır.",
   },
   {
     title: "İstisnalı Full Kesintili",
     to: "/icra-takip-brutten-nete/istisnali-full-kesintili",
     icon: ShieldCheck,
     color: "violet",
+    usage:
+      "Ücret Alacağı, Davacı Ücreti ve Bakiye Ücret Alacağı hesaplamalarında kullanılır (SGK, işsizlik, gelir ve damga kesintisi; asgari ücret istisnası dahil).",
   },
   {
     title: "İstisnasız Full Kesintili",
     to: "/icra-takip-brutten-nete/istisnasiz-full-kesintili",
     icon: ShieldOff,
     color: "amber",
+    usage:
+      "Fazla Mesai, UBGT, Hafta Tatili, Yıllık Ücretli İzin, İş Arama İzni Ücreti ve Boşta Geçen Süre Ücreti hesaplamalarında kullanılır.",
   },
 ];
 
@@ -61,21 +69,22 @@ export default function IcraTakipSelectionPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 w-full max-w-none">
-          {cards.map(({ title, to, icon: Icon, color }) => {
+          {cards.map(({ title, to, icon: Icon, color, usage }) => {
             const style = cardStyles[color] || cardStyles.emerald;
             return (
               <Link
                 key={to}
                 to={to}
-                className={`group relative flex flex-col items-center text-center gap-2 p-4 rounded-2xl transition-shadow duration-200 shadow-lg hover:shadow-xl ${style.card}`}
+                className={`group relative flex flex-col items-center text-center gap-2.5 p-5 sm:p-6 rounded-2xl transition-shadow duration-200 shadow-lg hover:shadow-xl ${style.card}`}
               >
-                <div className={`w-10 h-10 rounded-md flex items-center justify-center ${style.icon}`}>
+                <div className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 ${style.icon}`}>
                   <Icon className="w-6 h-6" strokeWidth={2.5} />
                 </div>
-                <h2 className="text-sm font-medium text-gray-900 dark:text-white">{title}</h2>
-                <span className={`text-xs text-gray-500 dark:text-gray-400 transition-colors ${style.accent}`}>
-                  Hesaplamaya git →
-                </span>
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-white leading-snug">{title}</h2>
+                <p className="text-[11px] sm:text-xs leading-relaxed text-gray-600 dark:text-gray-300 max-w-md">
+                  {usage}
+                </p>
+                <span className={`text-xs font-medium transition-colors ${style.accent}`}>Hesaplamaya git →</span>
               </Link>
             );
           })}

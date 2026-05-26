@@ -49,6 +49,26 @@ const fmtDateTR = (isoDate: string) => {
 const RECORD_TYPE = "icra_takip_istisnasiz_full_kesintili";
 const REDIRECT_PATH = "/icra-takip-brutten-nete/istisnasiz-full-kesintili";
 
+type BrutToNetDisplayRow = {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+};
+
+function buildBrutToNetDisplayRows(data: StandartBrutNet): BrutToNetDisplayRow[] {
+  const gvLabel = data.gelirVergisiDilimleri
+    ? `Gelir vergisi ${data.gelirVergisiDilimleri}`
+    : "Gelir vergisi";
+  return [
+    { label: "Brüt alacak", value: fmtCurrency(data.gross) },
+    { label: "SGK primi (%14)", value: `-${fmtCurrency(data.sgk)}` },
+    { label: "İşsizlik primi (%1)", value: `-${fmtCurrency(data.issizlik)}` },
+    { label: gvLabel, value: `-${fmtCurrency(data.gelirVergisi)}` },
+    { label: "Damga vergisi (binde 7,59)", value: `-${fmtCurrency(data.damgaVergisi)}` },
+    { label: "Ödenecek net tutar", value: fmtCurrency(data.net), emphasize: true },
+  ];
+}
+
 /** Standart fazla mesai sayfasındaki yıllık brütten nete (asgari ücret istisnası yok). */
 function computeStandartBrutNetFromGross(totalBrut: number, year: number): StandartBrutNet {
   if (totalBrut <= 0) return { ...emptyStandart };
@@ -274,18 +294,21 @@ export default function IstisnasizFullKesintiliPage() {
   const yearOptions = useMemo(() => Array.from({ length: currentYear - 2009 }, (_, i) => currentYear - i), [currentYear]);
 
   const faizOzetRows = useMemo(() => {
+    const gvLabel = standartNet.gelirVergisiDilimleri
+      ? `Gelir vergisi ${standartNet.gelirVergisiDilimleri}`
+      : "Gelir vergisi";
     const rows: { label: string; value: string; emphasize?: boolean }[] = [
-      { label: "Brüt Alacak Tutarı", value: `${fmtCurrency(grossVal)} TL` },
+      { label: "Brüt Alacak Tutarı", value: fmtCurrency(grossVal) },
     ];
     if (hasTwoPeriodsForYear) {
       rows.push({ label: "Asgari ücret referans dönemi", value: selectedPeriod === 1 ? "Oca-Haz" : "Tem-Ara" });
     }
     rows.push(
-      { label: "SGK Primi", value: `-${fmtCurrency(standartNet.sgk)} TL` },
-      { label: "İşsizlik Primi", value: `-${fmtCurrency(standartNet.issizlik)} TL` },
-      { label: "Gelir Vergisi", value: `-${fmtCurrency(standartNet.gelirVergisi)} TL` },
-      { label: "Damga Vergisi", value: `-${fmtCurrency(standartNet.damgaVergisi)} TL` },
-      { label: "Net Tutar (Anapara)", value: `${fmtCurrency(standartNet.net)} TL`, emphasize: true },
+      { label: "SGK Primi", value: `-${fmtCurrency(standartNet.sgk)}` },
+      { label: "İşsizlik Primi", value: `-${fmtCurrency(standartNet.issizlik)}` },
+      { label: gvLabel, value: `-${fmtCurrency(standartNet.gelirVergisi)}` },
+      { label: "Damga Vergisi", value: `-${fmtCurrency(standartNet.damgaVergisi)}` },
+      { label: "Ödenecek net tutar", value: fmtCurrency(standartNet.net), emphasize: true },
       { label: "Faiz Başlangıç Tarihi", value: fmtDateTR(faizBaslangicTarihi) },
       { label: "İcra Takip Tarihi", value: fmtDateTR(icraTakipTarihi) },
       {
@@ -374,27 +397,27 @@ export default function IstisnasizFullKesintiliPage() {
               <div className="space-y-1 pt-1 border-t border-gray-200 dark:border-gray-700 text-xs">
                 <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800">
                   <span className="text-gray-600 dark:text-gray-400">Brüt alacak</span>
-                  <span className="font-semibold">{fmtCurrency(standartNet.gross)} ₺</span>
+                  <span className="font-semibold">{fmtCurrency(standartNet.gross)}</span>
                 </div>
                 <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-red-600 dark:text-red-400">
                   <span>SGK primi (%14)</span>
-                  <span>-{fmtCurrency(standartNet.sgk)} ₺</span>
+                  <span>-{fmtCurrency(standartNet.sgk)}</span>
                 </div>
                 <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-red-600 dark:text-red-400">
                   <span>İşsizlik primi (%1)</span>
-                  <span>-{fmtCurrency(standartNet.issizlik)} ₺</span>
+                  <span>-{fmtCurrency(standartNet.issizlik)}</span>
                 </div>
                 <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-red-600 dark:text-red-400">
                   <span className="pr-1">Gelir vergisi {standartNet.gelirVergisiDilimleri}</span>
-                  <span className="shrink-0">-{fmtCurrency(standartNet.gelirVergisi)} ₺</span>
+                  <span className="shrink-0">-{fmtCurrency(standartNet.gelirVergisi)}</span>
                 </div>
                 <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-red-600 dark:text-red-400">
                   <span>Damga vergisi (binde 7,59)</span>
-                  <span>-{fmtCurrency(standartNet.damgaVergisi)} ₺</span>
+                  <span>-{fmtCurrency(standartNet.damgaVergisi)}</span>
                 </div>
                 <div className="flex justify-between pt-1.5 font-semibold text-green-700 dark:text-green-400">
-                  <span>Net tutar (anapara)</span>
-                  <span>{fmtCurrency(standartNet.net)} ₺</span>
+                  <span>Ödenecek net tutar</span>
+                  <span>{fmtCurrency(standartNet.net)}</span>
                 </div>
               </div>
             </CardContent>
@@ -508,7 +531,7 @@ export default function IstisnasizFullKesintiliPage() {
                               <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 whitespace-nowrap">{fmtDateTR(period.endDate)}</td>
                               <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right">{period.days}</td>
                               <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right">%{period.rate}</td>
-                              <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-medium">{fmtCurrency(period.interest)} TL</td>
+                              <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-medium">{fmtCurrency(period.interest)}</td>
                             </tr>
                           ))
                         ) : (
@@ -584,29 +607,21 @@ export default function IstisnasizFullKesintiliPage() {
                 <div className="section-content">
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }}>
                     <tbody>
-                      {[
-                        ["Brüt Alacak Tutarı", `${fmtCurrency(grossVal)} TL`],
-                        ["Yıl", String(selectedYear)],
-                        ...(hasTwoPeriodsForYear ? [["Asgari ücret referans dönemi", selectedPeriod === 1 ? "Oca-Haz" : "Tem-Ara"]] : []),
-                        ["SGK Primi", `-${fmtCurrency(standartNet.sgk)} TL`],
-                        ["İşsizlik Primi", `-${fmtCurrency(standartNet.issizlik)} TL`],
-                        ["Gelir vergisi dilimleri", standartNet.gelirVergisiDilimleri || "-"],
-                        ["Gelir Vergisi", `-${fmtCurrency(standartNet.gelirVergisi)} TL`],
-                        ["Damga Vergisi", `-${fmtCurrency(standartNet.damgaVergisi)} TL`],
-                        ["Net Tutar (Anapara)", `${fmtCurrency(standartNet.net)} TL`],
-                      ].map(([label, value], idx) => (
-                        <tr key={`${String(label)}-${idx}`}>
-                          <td style={{ border: "1px solid #d1d5db", padding: "6px 8px", color: "#4b5563", width: "45%" }}>{label}</td>
+                      {buildBrutToNetDisplayRows(standartNet).map((row, idx) => (
+                        <tr key={`${row.label}-${idx}`}>
+                          <td style={{ border: "1px solid #d1d5db", padding: "6px 8px", color: "#4b5563", width: "45%" }}>
+                            {row.label}
+                          </td>
                           <td
                             style={{
                               border: "1px solid #d1d5db",
                               padding: "6px 8px",
                               textAlign: "right",
-                              fontWeight: label === "Net Tutar (Anapara)" ? 700 : 500,
-                              color: label === "Net Tutar (Anapara)" ? "#166534" : "#111827",
+                              fontWeight: row.emphasize ? 700 : 500,
+                              color: row.emphasize ? "#166534" : "#111827",
                             }}
                           >
-                            {value}
+                            {row.value}
                           </td>
                         </tr>
                       ))}
@@ -666,7 +681,7 @@ export default function IstisnasizFullKesintiliPage() {
                             <td style={{ border: "1px solid #d1d5db", padding: "6px 8px", textAlign: "right" }}>{period.days}</td>
                             <td style={{ border: "1px solid #d1d5db", padding: "6px 8px", textAlign: "right" }}>%{period.rate}</td>
                             <td style={{ border: "1px solid #d1d5db", padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>
-                              {fmtCurrency(period.interest)} TL
+                              {fmtCurrency(period.interest)}
                             </td>
                           </tr>
                         ))

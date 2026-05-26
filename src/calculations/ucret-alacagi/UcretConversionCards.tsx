@@ -96,61 +96,63 @@ function GrossToNetPanel({
         <div className="space-y-1 pt-2 border-t border-gray-200 dark:border-gray-600">
           <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
             <span className="text-gray-600 dark:text-gray-400">Brüt Ücret</span>
-            <span className="font-semibold">{fmtCurrency(data.gross)}₺</span>
+            <span className="font-semibold">{fmtCurrency(data.gross)}</span>
           </div>
           <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
             <span className="text-red-600">SGK Primi (%14)</span>
-            <span className="font-semibold text-red-600">-{fmtCurrency(data.sgk)}₺</span>
+            <span className="font-semibold text-red-600">-{fmtCurrency(data.sgk)}</span>
           </div>
           <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
             <span className="text-red-600">İşsizlik Primi (%1)</span>
-            <span className="font-semibold text-red-600">-{fmtCurrency(data.issizlik)}₺</span>
+            <span className="font-semibold text-red-600">-{fmtCurrency(data.issizlik)}</span>
           </div>
           {data.gelirVergisiIstisna > 0 ? (
             <>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                <span className="text-red-600">Gelir Vergisi (Brüt)</span>
-                <span className="font-semibold text-red-600">-{fmtCurrency(data.gelirVergisiBrut)}₺</span>
+                <span className="text-red-600">
+                  Gelir Vergisi (Brüt){data.gelirVergisiDilimleri ? ` ${data.gelirVergisiDilimleri}` : ""}
+                </span>
+                <span className="font-semibold text-red-600">-{fmtCurrency(data.gelirVergisiBrut)}</span>
               </div>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-green-600">Asg. Üc. Gel. Vergi İst.</span>
-                <span className="font-semibold text-green-600">+{fmtCurrency(data.gelirVergisiIstisna)}₺</span>
+                <span className="font-semibold text-green-600">+{fmtCurrency(data.gelirVergisiIstisna)}</span>
               </div>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-gray-600">Net Gelir Vergisi</span>
-                <span className="font-semibold">-{fmtCurrency(data.gelirVergisi)}₺</span>
+                <span className="font-semibold">-{fmtCurrency(data.gelirVergisi)}</span>
               </div>
             </>
           ) : (
             <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
               <span className="text-red-600">Gelir Vergisi {data.gelirVergisiDilimleri}</span>
-              <span className="font-semibold text-red-600">-{fmtCurrency(data.gelirVergisi)}₺</span>
+              <span className="font-semibold text-red-600">-{fmtCurrency(data.gelirVergisi)}</span>
             </div>
           )}
           {data.damgaVergisiIstisna > 0 ? (
             <>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-red-600">Damga Vergisi (Brüt)</span>
-                <span className="font-semibold text-red-600">-{fmtCurrency(data.damgaVergisiBrut)}₺</span>
+                <span className="font-semibold text-red-600">-{fmtCurrency(data.damgaVergisiBrut)}</span>
               </div>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-green-600">Asg. Üc. Damga Vergi İst.</span>
-                <span className="font-semibold text-green-600">+{fmtCurrency(data.damgaVergisiIstisna)}₺</span>
+                <span className="font-semibold text-green-600">+{fmtCurrency(data.damgaVergisiIstisna)}</span>
               </div>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-gray-600">Net Damga Vergisi</span>
-                <span className="font-semibold">-{fmtCurrency(data.damgaVergisi)}₺</span>
+                <span className="font-semibold">-{fmtCurrency(data.damgaVergisi)}</span>
               </div>
             </>
           ) : (
             <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
               <span className="text-red-600">Damga Vergisi (binde 7,59)</span>
-              <span className="font-semibold text-red-600">-{fmtCurrency(data.damgaVergisi)}₺</span>
+              <span className="font-semibold text-red-600">-{fmtCurrency(data.damgaVergisi)}</span>
             </div>
           )}
           <div className="flex justify-between pt-2">
             <span className="text-sm font-semibold text-green-700 dark:text-green-400">Net Ücret</span>
-            <span className="text-sm font-bold text-green-700 dark:text-green-400">{fmtCurrency(data.net)}₺</span>
+            <span className="text-sm font-bold text-green-700 dark:text-green-400">{fmtCurrency(data.net)}</span>
           </div>
         </div>
       </CardContent>
@@ -212,61 +214,63 @@ function NetToGrossPanel({
         <div className="space-y-1 pt-2 border-t border-gray-200 dark:border-gray-600">
           <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
             <span className="text-gray-600 dark:text-gray-400">Net Ücret</span>
-            <span className="font-semibold">{fmtCurrency(data.net)}₺</span>
+            <span className="font-semibold">{fmtCurrency(data.net)}</span>
           </div>
           <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
             <span className="text-red-600">SGK Primi (%14)</span>
-            <span className="font-semibold text-red-600">+{fmtCurrency(data.sgk)}₺</span>
+            <span className="font-semibold text-red-600">+{fmtCurrency(data.sgk)}</span>
           </div>
           <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
             <span className="text-red-600">İşsizlik Primi (%1)</span>
-            <span className="font-semibold text-red-600">+{fmtCurrency(data.issizlik)}₺</span>
+            <span className="font-semibold text-red-600">+{fmtCurrency(data.issizlik)}</span>
           </div>
           {(data.gelirVergisiIstisna ?? 0) > 0 ? (
             <>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                <span className="text-red-600">Gelir Vergisi (Brüt)</span>
-                <span className="font-semibold text-red-600">+{fmtCurrency(data.gelirVergisiBrut ?? 0)}₺</span>
+                <span className="text-red-600">
+                  Gelir Vergisi (Brüt){data.gelirVergisiDilimleri ? ` ${data.gelirVergisiDilimleri}` : ""}
+                </span>
+                <span className="font-semibold text-red-600">+{fmtCurrency(data.gelirVergisiBrut ?? 0)}</span>
               </div>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-green-600">Asg. Üc. Gel. Vergi İst.</span>
-                <span className="font-semibold text-green-600">-{fmtCurrency(data.gelirVergisiIstisna ?? 0)}₺</span>
+                <span className="font-semibold text-green-600">-{fmtCurrency(data.gelirVergisiIstisna ?? 0)}</span>
               </div>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-gray-600">Net Gelir Vergisi</span>
-                <span className="font-semibold">+{fmtCurrency(data.gelirVergisi)}₺</span>
+                <span className="font-semibold">+{fmtCurrency(data.gelirVergisi)}</span>
               </div>
             </>
           ) : (
             <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
               <span className="text-red-600">Gelir Vergisi {data.gelirVergisiDilimleri}</span>
-              <span className="font-semibold text-red-600">+{fmtCurrency(data.gelirVergisi)}₺</span>
+              <span className="font-semibold text-red-600">+{fmtCurrency(data.gelirVergisi)}</span>
             </div>
           )}
           {(data.damgaVergisiIstisna ?? 0) > 0 ? (
             <>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-red-600">Damga Vergisi (Brüt)</span>
-                <span className="font-semibold text-red-600">+{fmtCurrency(data.damgaVergisiBrut ?? 0)}₺</span>
+                <span className="font-semibold text-red-600">+{fmtCurrency(data.damgaVergisiBrut ?? 0)}</span>
               </div>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-green-600">Asg. Üc. Damga Vergi İst.</span>
-                <span className="font-semibold text-green-600">-{fmtCurrency(data.damgaVergisiIstisna ?? 0)}₺</span>
+                <span className="font-semibold text-green-600">-{fmtCurrency(data.damgaVergisiIstisna ?? 0)}</span>
               </div>
               <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-gray-600">Net Damga Vergisi</span>
-                <span className="font-semibold">+{fmtCurrency(data.damgaVergisi)}₺</span>
+                <span className="font-semibold">+{fmtCurrency(data.damgaVergisi)}</span>
               </div>
             </>
           ) : (
             <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
               <span className="text-red-600">Damga Vergisi (binde 7,59)</span>
-              <span className="font-semibold text-red-600">+{fmtCurrency(data.damgaVergisi)}₺</span>
+              <span className="font-semibold text-red-600">+{fmtCurrency(data.damgaVergisi)}</span>
             </div>
           )}
           <div className="flex justify-between pt-2">
             <span className="text-sm font-semibold text-green-700 dark:text-green-400">Brüt Ücret</span>
-            <span className="text-sm font-bold text-green-700 dark:text-green-400">{fmtCurrency(data.gross)}₺</span>
+            <span className="text-sm font-bold text-green-700 dark:text-green-400">{fmtCurrency(data.gross)}</span>
           </div>
         </div>
       </CardContent>

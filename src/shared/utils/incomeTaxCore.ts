@@ -1,6 +1,6 @@
 // src/utils/incomeTaxCore.ts
 //------------------------------------------------------------
-// GELİR VERGİSİ TARİFESİ (ÜCRETLİLER) — 2010–2025 TAM SET
+// GELİR VERGİSİ TARİFESİ (ÜCRETLİLER) — 2010–2030
 // GİB RESMİ TEBLİĞLERİNE %100 UYUMLU
 //------------------------------------------------------------
 
@@ -11,7 +11,21 @@ export interface TaxBracket {
   baseLimit: number;      // önceki dilimlerin toplam limiti
 }
 
+const BRACKETS_2026_2030: TaxBracket[] = [
+  { limit: 198274, rate: 0.15, baseTax: 0, baseLimit: 0 },
+  { limit: 414117, rate: 0.20, baseTax: 29741, baseLimit: 198274 },
+  { limit: 1505880, rate: 0.27, baseTax: 71909, baseLimit: 414117 },
+  { limit: 5396070, rate: 0.35, baseTax: 366685, baseLimit: 1505880 },
+  { limit: null, rate: 0.40, baseTax: 1731252, baseLimit: 5396070 },
+];
+
 export const incomeTaxRates: Record<number, TaxBracket[]> = {
+  2030: BRACKETS_2026_2030,
+  2029: BRACKETS_2026_2030,
+  2028: BRACKETS_2026_2030,
+  2027: BRACKETS_2026_2030,
+  2026: BRACKETS_2026_2030,
+
   // ----------------------------
   // 2025
   // ----------------------------
@@ -190,8 +204,17 @@ export const DAMGA_VERGISI_ORANI = 0.00759; // %0.759 damga vergisi
 // BRÜT → GELİR VERGİSİ → NET
 //------------------------------------------------------------
 
+function getRatesForYear(year: number): TaxBracket[] | undefined {
+  if (incomeTaxRates[year]) return incomeTaxRates[year];
+  const years = Object.keys(incomeTaxRates).map(Number).sort((a, b) => b - a);
+  for (const y of years) {
+    if (year >= y) return incomeTaxRates[y];
+  }
+  return incomeTaxRates[2010];
+}
+
 export function calculateIncomeTaxForYear(year: number, income: number) {
-  const brackets = incomeTaxRates[year];
+  const brackets = getRatesForYear(year);
   if (!brackets) return 0;
 
   for (const b of brackets) {
@@ -205,8 +228,8 @@ export function calculateIncomeTaxForYear(year: number, income: number) {
 
 // Bracket bilgileri ile birlikte gelir vergisi hesaplama
 export function calculateIncomeTaxWithBrackets(year: number, income: number): { tax: number; brackets: string } {
-  const brackets = incomeTaxRates[year];
-  if (!brackets) return { tax: 0, brackets: '' };
+  const brackets = getRatesForYear(year);
+  if (!brackets || income <= 0) return { tax: 0, brackets: "" };
 
   const appliedBrackets: number[] = [];
   let tax = 0;

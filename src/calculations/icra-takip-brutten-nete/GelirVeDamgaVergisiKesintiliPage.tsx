@@ -11,7 +11,6 @@ import { copySectionForWord } from "@/utils/copyTableForWord";
 import { apiClient } from "@/utils/apiClient";
 import { hasTwoPeriods } from "@/calculations/davaci-ucreti/engine/asgariWage";
 import {
-  calculateIncomeTaxWithBrackets,
   computeNetFromGrossSingle,
   type SegmentedNetResult,
 } from "@/calculations/ucret-alacagi/incomeTaxCore";
@@ -40,7 +39,67 @@ const emptySeg: SegmentedNetResult = {
   totalDamgaVergisiIstisna: 0,
   totalDamgaVergisi: 0,
   totalNet: 0,
+  gelirVergisiDilimleri: "",
 };
+
+type BrutToNetDisplayRow = {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+  positive?: boolean;
+};
+
+function formatGelirVergisiBrutLabel(dilimleri: string): string {
+  return dilimleri ? `Gelir vergisi ${dilimleri}` : "Gelir vergisi";
+}
+
+const DAMGA_VERGISI_LABEL = "Damga vergisi (binde 7,59)";
+
+function buildGelirDamgaBrutNetRows(net: SegmentedNetResult): BrutToNetDisplayRow[] {
+  const dilimleri = net.gelirVergisiDilimleri || "";
+  const rows: BrutToNetDisplayRow[] = [
+    { label: "Brüt alacak", value: fmtCurrency(net.totalGross) },
+    { label: "SGK primi (%14)", value: `-${fmtCurrency(net.totalSgk)}` },
+    { label: "İşsizlik primi (%1)", value: `-${fmtCurrency(net.totalIssizlik)}` },
+  ];
+
+  if ((net.totalGelirVergisiIstisna ?? 0) > 0) {
+    rows.push(
+      { label: formatGelirVergisiBrutLabel(dilimleri), value: `-${fmtCurrency(net.totalGelirVergisiBrut ?? 0)}` },
+      {
+        label: "Asg. üc. gel. vergi ist.",
+        value: `+${fmtCurrency(net.totalGelirVergisiIstisna ?? 0)}`,
+        positive: true,
+      },
+      { label: "Net gelir vergisi", value: `-${fmtCurrency(net.totalGelirVergisi)}` }
+    );
+  } else {
+    rows.push({
+      label: formatGelirVergisiBrutLabel(dilimleri),
+      value: `-${fmtCurrency(net.totalGelirVergisi)}`,
+    });
+  }
+
+  if ((net.totalDamgaVergisiIstisna ?? 0) > 0) {
+    rows.push(
+      { label: DAMGA_VERGISI_LABEL, value: `-${fmtCurrency(net.totalDamgaVergisiBrut ?? 0)}` },
+      {
+        label: "Asg. üc. damga vergi ist.",
+        value: `+${fmtCurrency(net.totalDamgaVergisiIstisna ?? 0)}`,
+        positive: true,
+      },
+      { label: "Net damga vergisi", value: `-${fmtCurrency(net.totalDamgaVergisi)}` }
+    );
+  } else {
+    rows.push({
+      label: DAMGA_VERGISI_LABEL,
+      value: `-${fmtCurrency(net.totalDamgaVergisi)}`,
+    });
+  }
+
+  rows.push({ label: "Ödenecek net tutar", value: fmtCurrency(net.totalNet), emphasize: true });
+  return rows;
+}
 
 export default function GelirVeDamgaVergisiKesintiliPage() {
   const navigate = useNavigate();
@@ -69,22 +128,9 @@ export default function GelirVeDamgaVergisiKesintiliPage() {
     return computeNetFromGrossSingle(grossVal, gelirVergisiYili, period);
   }, [grossVal, gelirVergisiYili, selectedPeriod, hasTwoPeriodsForYear]);
 
-  const matrah = useMemo(
-    () => Math.max(0, grossVal - netFromGross.totalSgk - netFromGross.totalIssizlik),
-    [grossVal, netFromGross.totalSgk, netFromGross.totalIssizlik]
-  );
-  const gelirVergisiDilimleri = useMemo(() => {
-    if (grossVal <= 0) return "";
-    return calculateIncomeTaxWithBrackets(gelirVergisiYili, matrah).summary;
-  }, [grossVal, gelirVergisiYili, matrah]);
-
   const gelirVergisi = netFromGross.totalGelirVergisi;
   const damgaVergisi = netFromGross.totalDamgaVergisi;
-  /** İcra anaparası: yalnızca gelir ve damga kesintisi sonrası (SGK/işsizlik tutardan düşülmez). */
-  const netAnapara = useMemo(
-    () => (grossVal <= 0 ? 0 : Math.round((grossVal - gelirVergisi - damgaVergisi) * 100) / 100),
-    [grossVal, gelirVergisi, damgaVergisi]
-  );
+  const netTutar = netFromGross.totalNet;
 
   const interestType: InterestType = faizTuru === "yasal" ? "LEGAL_INTEREST" : "HIGHEST_DEPOSIT_INTEREST";
 
@@ -94,7 +140,7 @@ export default function GelirVeDamgaVergisiKesintiliPage() {
       setDepositInterestError(null);
       return;
     }
-    if (!faizBaslangicTarihi || !icraTakipTarihi || netAnapara <= 0) {
+    if (!faizBaslangicTarihi || !icraTakipTarihi || netTutar <= 0) {
       setDepositInterestPeriods([]);
       setDepositInterestError(null);
       return;
@@ -129,27 +175,27 @@ export default function GelirVeDamgaVergisiKesintiliPage() {
     return () => {
       cancelled = true;
     };
-  }, [interestType, faizBaslangicTarihi, icraTakipTarihi, netAnapara]);
+  }, [interestType, faizBaslangicTarihi, icraTakipTarihi, netTutar]);
 
   const interestResult = useMemo(() => {
-    if (grossVal <= 0 || netAnapara <= 0) return null;
+    if (grossVal <= 0 || netTutar <= 0) return null;
     if (!faizBaslangicTarihi || !icraTakipTarihi) return null;
     if (interestType === "HIGHEST_DEPOSIT_INTEREST" && depositInterestError) {
       return { ok: false as const, message: depositInterestError };
     }
     return calculateInterest({
-      principal: netAnapara,
+      principal: netTutar,
       startDate: faizBaslangicTarihi,
       endDate: icraTakipTarihi,
       interestType,
       depositInterestRates: interestType === "HIGHEST_DEPOSIT_INTEREST" ? depositInterestPeriods : undefined,
     });
-  }, [grossVal, netAnapara, faizBaslangicTarihi, icraTakipTarihi, interestType, depositInterestPeriods, depositInterestError]);
+  }, [grossVal, netTutar, faizBaslangicTarihi, icraTakipTarihi, interestType, depositInterestPeriods, depositInterestError]);
 
   const isInterestSuccess = !!interestResult && interestResult.ok;
   const interestWarning = interestResult && !interestResult.ok ? interestResult.message : null;
   const totalInterest = isInterestSuccess ? interestResult.totalInterest : 0;
-  const takipToplami = isInterestSuccess ? netAnapara + interestResult.totalInterest : netAnapara;
+  const takipToplami = isInterestSuccess ? netTutar + interestResult.totalInterest : netTutar;
 
   useEffect(() => {
     if (!effectiveId) return;
@@ -237,7 +283,7 @@ export default function GelirVeDamgaVergisiKesintiliPage() {
               issizlik: netFromGross.totalIssizlik,
               gelirVergisi,
               damgaVergisi,
-              net: netAnapara,
+              net: netTutar,
               totalDays: interestResult.totalDays,
               totalInterest,
               takipToplami,
@@ -258,6 +304,11 @@ export default function GelirVeDamgaVergisiKesintiliPage() {
     }
   };
 
+  const brutNetDisplayRows = useMemo(
+    () => (grossVal <= 0 ? [] : buildGelirDamgaBrutNetRows(netFromGross)),
+    [grossVal, netFromGross]
+  );
+
   const yearOptions = useMemo(
     () => Array.from({ length: currentYear - 2009 }, (_, i) => currentYear - i),
     [currentYear]
@@ -270,8 +321,7 @@ export default function GelirVeDamgaVergisiKesintiliPage() {
           <div className="rounded-xl border border-violet-200/70 dark:border-violet-800/50 bg-white dark:bg-gray-800 shadow-sm p-3 sm:p-4">
             <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">Gelir Vergisi ve Damga Vergisi Kesintili</h1>
             <p className="mt-1.5 text-sm text-gray-600 dark:text-gray-300">
-              Gelir ve damga hesabı, İstisnalı Full Kesintili ile aynı motorla yapılır (SGK/işsizlik matrahta düşülür; icra anaparası yalnızca gelir ve damga
-              kesintisi sonrası tutar). Çift asgari ücret dönemi olan yıllarda dönem seçimi uygulanır.
+              Brütten nete çeviri, asgari ücret gelir/damga vergi istisnası dahil hesaplanır. Çift asgari ücret dönemi olan yıllarda dönem seçimi uygulanır.
             </p>
           </div>
 
@@ -326,72 +376,37 @@ export default function GelirVeDamgaVergisiKesintiliPage() {
               </div>
 
               <p className="text-[10px] leading-snug text-gray-500 dark:text-gray-400">
-                Gelir vergisi matrahı brüt − SGK (%14) − işsizlik (%1) üzerinden hesaplanır; asgari ücret istisnası seçilen yıl ve döneme göre belirlenir. Net
-                tutar (anapara), icra takibinde yalnızca gelir ve damga kesintilerinin düşülmüş halidir.
+                Gelir vergisi matrahı brüt − SGK (%14) − işsizlik (%1) üzerinden hesaplanır; asgari ücret istisnası seçilen yıl ve döneme göre belirlenir.
               </p>
 
               <div className="space-y-1 pt-1 border-t border-gray-200 dark:border-gray-700 text-xs">
-                <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800">
-                  <span className="text-gray-600 dark:text-gray-400">Brüt alacak</span>
-                  <span className="font-semibold">{fmtCurrency(netFromGross.totalGross)} ₺</span>
-                </div>
-                <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-amber-800/90 dark:text-amber-200/90">
-                  <span>SGK primi (matrah, %14)</span>
-                  <span>-{fmtCurrency(netFromGross.totalSgk)} ₺</span>
-                </div>
-                <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-amber-800/90 dark:text-amber-200/90">
-                  <span>İşsizlik primi (matrah, %1)</span>
-                  <span>-{fmtCurrency(netFromGross.totalIssizlik)} ₺</span>
-                </div>
-
-                {(netFromGross.totalGelirVergisiIstisna ?? 0) > 0 ? (
-                  <>
-                    <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-red-600 dark:text-red-400">
-                      <span>Gelir vergisi (brüt)</span>
-                      <span>-{fmtCurrency(netFromGross.totalGelirVergisiBrut ?? 0)} ₺</span>
+                {brutNetDisplayRows.map((row) => {
+                  const valueCls = row.emphasize
+                    ? "font-semibold text-green-700 dark:text-green-400"
+                    : row.positive
+                      ? "text-green-600 dark:text-green-400"
+                      : row.label.startsWith("Net gelir") || row.label.startsWith("Net damga")
+                        ? "text-gray-800 dark:text-gray-200"
+                        : "text-red-600 dark:text-red-400";
+                  const labelCls = row.emphasize
+                    ? "font-semibold text-green-700 dark:text-green-400"
+                    : row.positive
+                      ? "text-green-600 dark:text-green-400"
+                      : row.label.startsWith("Net gelir") || row.label.startsWith("Net damga")
+                        ? "text-gray-600 dark:text-gray-400"
+                        : row.label.startsWith("Gelir vergisi")
+                          ? "pr-1 text-red-600 dark:text-red-400"
+                          : "text-red-600 dark:text-red-400";
+                  return (
+                    <div
+                      key={row.label}
+                      className={`flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 ${row.emphasize ? "pt-1.5" : ""}`}
+                    >
+                      <span className={labelCls}>{row.label}</span>
+                      <span className={`shrink-0 ${valueCls}`}>{row.value}</span>
                     </div>
-                    <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-green-600 dark:text-green-400">
-                      <span>Asg. üc. gel. vergi ist.</span>
-                      <span>+{fmtCurrency(netFromGross.totalGelirVergisiIstisna ?? 0)} ₺</span>
-                    </div>
-                    <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800">
-                      <span className="text-gray-600 dark:text-gray-400">Net gelir vergisi</span>
-                      <span>-{fmtCurrency(netFromGross.totalGelirVergisi)} ₺</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-red-600 dark:text-red-400">
-                    <span className="pr-1">Gelir vergisi {gelirVergisiDilimleri}</span>
-                    <span className="shrink-0">-{fmtCurrency(netFromGross.totalGelirVergisi)} ₺</span>
-                  </div>
-                )}
-
-                {(netFromGross.totalDamgaVergisiIstisna ?? 0) > 0 ? (
-                  <>
-                    <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-red-600 dark:text-red-400">
-                      <span>Damga vergisi (brüt)</span>
-                      <span>-{fmtCurrency(netFromGross.totalDamgaVergisiBrut ?? 0)} ₺</span>
-                    </div>
-                    <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-green-600 dark:text-green-400">
-                      <span>Asg. üc. damga vergi ist.</span>
-                      <span>+{fmtCurrency(netFromGross.totalDamgaVergisiIstisna ?? 0)} ₺</span>
-                    </div>
-                    <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800">
-                      <span className="text-gray-600 dark:text-gray-400">Net damga vergisi</span>
-                      <span>-{fmtCurrency(netFromGross.totalDamgaVergisi)} ₺</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-800 text-red-600 dark:text-red-400">
-                    <span>Damga vergisi (binde 7,59)</span>
-                    <span>-{fmtCurrency(netFromGross.totalDamgaVergisi)} ₺</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between pt-1.5 font-semibold text-green-700 dark:text-green-400">
-                  <span>Net tutar (anapara)</span>
-                  <span>{fmtCurrency(netAnapara)} ₺</span>
-                </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -460,15 +475,14 @@ export default function GelirVeDamgaVergisiKesintiliPage() {
                 <div className="rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
                   <div className="grid grid-cols-1 md:grid-cols-2 text-xs">
                     {[
-                      { label: "Brüt Alacak Tutarı", value: `${fmtCurrency(grossVal)} TL` },
+                      ...brutNetDisplayRows.map((row) => ({
+                        label: row.label,
+                        value: row.value,
+                        emphasize: row.emphasize,
+                      })),
                       ...(hasTwoPeriodsForYear
                         ? [{ label: "Asgari ücret dönemi", value: selectedPeriod === 1 ? "Oca-Haz" : "Tem-Ara" }]
                         : []),
-                      { label: "SGK Primi (matrah)", value: `-${fmtCurrency(netFromGross.totalSgk)} TL` },
-                      { label: "İşsizlik Primi (matrah)", value: `-${fmtCurrency(netFromGross.totalIssizlik)} TL` },
-                      { label: "Gelir Vergisi", value: `-${fmtCurrency(gelirVergisi)} TL` },
-                      { label: "Damga Vergisi", value: `-${fmtCurrency(damgaVergisi)} TL` },
-                      { label: "Net Tutar (Anapara)", value: `${fmtCurrency(netAnapara)} TL`, emphasize: true },
                       { label: "Faiz Başlangıç Tarihi", value: fmtDateTR(faizBaslangicTarihi) },
                       { label: "İcra Takip Tarihi", value: fmtDateTR(icraTakipTarihi) },
                       { label: "Gün Sayısı", value: `${interestResult.totalDays} gün` },
@@ -520,7 +534,7 @@ export default function GelirVeDamgaVergisiKesintiliPage() {
                               <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 whitespace-nowrap">{fmtDateTR(period.endDate)}</td>
                               <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right">{period.days}</td>
                               <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right">%{period.rate}</td>
-                              <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-medium">{fmtCurrency(period.interest)} TL</td>
+                              <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-medium">{fmtCurrency(period.interest)}</td>
                             </tr>
                           ))
                         ) : (
@@ -596,28 +610,21 @@ export default function GelirVeDamgaVergisiKesintiliPage() {
                 <div className="section-content">
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }}>
                     <tbody>
-                      {[
-                        ["Brüt Alacak Tutarı", `${fmtCurrency(grossVal)} TL`],
-                        ["Yıl", String(gelirVergisiYili)],
-                        ...(hasTwoPeriodsForYear ? [["Asgari ücret dönemi", selectedPeriod === 1 ? "Oca-Haz" : "Tem-Ara"]] as [string, string][] : []),
-                        ["SGK primi (matrah)", `-${fmtCurrency(netFromGross.totalSgk)} TL`],
-                        ["İşsizlik primi (matrah)", `-${fmtCurrency(netFromGross.totalIssizlik)} TL`],
-                        ["Gelir Vergisi", `-${fmtCurrency(gelirVergisi)} TL`],
-                        ["Damga Vergisi", `-${fmtCurrency(damgaVergisi)} TL`],
-                        ["Net Tutar (Anapara)", `${fmtCurrency(netAnapara)} TL`],
-                      ].map(([label, value], idx) => (
-                        <tr key={`${label}-${idx}`}>
-                          <td style={{ border: "1px solid #d1d5db", padding: "6px 8px", color: "#4b5563", width: "45%" }}>{label}</td>
+                      {brutNetDisplayRows.map((row, idx) => (
+                        <tr key={`${row.label}-${idx}`}>
+                          <td style={{ border: "1px solid #d1d5db", padding: "6px 8px", color: "#4b5563", width: "45%" }}>
+                            {row.label}
+                          </td>
                           <td
                             style={{
                               border: "1px solid #d1d5db",
                               padding: "6px 8px",
                               textAlign: "right",
-                              fontWeight: label === "Net Tutar (Anapara)" ? 700 : 500,
-                              color: label === "Net Tutar (Anapara)" ? "#166534" : "#111827",
+                              fontWeight: row.emphasize ? 700 : 500,
+                              color: row.emphasize ? "#166534" : row.positive ? "#15803d" : "#111827",
                             }}
                           >
-                            {value}
+                            {row.value}
                           </td>
                         </tr>
                       ))}
@@ -677,7 +684,7 @@ export default function GelirVeDamgaVergisiKesintiliPage() {
                             <td style={{ border: "1px solid #d1d5db", padding: "6px 8px", textAlign: "right" }}>{period.days}</td>
                             <td style={{ border: "1px solid #d1d5db", padding: "6px 8px", textAlign: "right" }}>%{period.rate}</td>
                             <td style={{ border: "1px solid #d1d5db", padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>
-                              {fmtCurrency(period.interest)} TL
+                              {fmtCurrency(period.interest)}
                             </td>
                           </tr>
                         ))

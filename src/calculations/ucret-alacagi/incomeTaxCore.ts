@@ -4,7 +4,7 @@
  * GİB tebliğlerine uyumlu 2010–2030.
  */
 
-import { calcKalanRows, calcCetvelGrandTotal } from "./ucretAlacagiCalc";
+import { calcPeriodSliceRows, calcCetvelGrandTotal } from "./ucretAlacagiCalc";
 
 type Bracket = { limit: number | null; rate: number; baseTax: number; baseLimit: number };
 
@@ -53,22 +53,177 @@ function calculateIncomeTax(year: number, income: number): number {
 
 /**
  * Toplam brüt ücrete göre kesilecek gelir vergisinin kademeli oranını döndürür.
- * Matrah = brüt - SGK - işsizlik. Bu matrahın hangi dilim(ler)e düştüğünü gösterir.
+ * Matrah = brüt - SGK - işsizlik. Hangi dilim(ler)den kesildiğini gösterir.
  */
-export function calculateIncomeTaxWithBrackets(year: number, matrah: number): { tax: number; summary: string } {
+export function calculateIncomeTaxWithBrackets(year: number, income: number): { tax: number; summary: string } {
   const brackets = getRatesForYear(year);
+  if (!brackets || income <= 0) {
+    return { tax: 0, summary: "" };
+  }
+
   const appliedRates: number[] = [];
-  let tax = 0;
-  for (const b of brackets) {
-    const ratePct = Math.round(b.rate * 100);
-    if (!appliedRates.includes(ratePct)) appliedRates.push(ratePct);
-    if (b.limit === null || matrah <= b.limit) {
-      tax = b.baseTax + (matrah - b.baseLimit) * b.rate;
-      break;
+  let totalTax = 0;
+
+  for (const bracket of brackets) {
+    const bracketStart = bracket.baseLimit;
+    const bracketEnd = bracket.limit;
+
+    let taxableInThisBracket = 0;
+    if (bracketEnd === null) {
+      taxableInThisBracket = income - bracketStart;
+    } else if (income > bracketEnd) {
+      taxableInThisBracket = bracketEnd - bracketStart;
+    } else {
+      taxableInThisBracket = income - bracketStart;
+    }
+
+    if (taxableInThisBracket > 0) {
+      totalTax += taxableInThisBracket * bracket.rate;
+      const ratePct = Math.round(bracket.rate * 100);
+      if (!appliedRates.includes(ratePct)) appliedRates.push(ratePct);
+    }
+
+    if (bracketEnd === null || income <= bracketEnd) break;
+  }
+
+  const summary = appliedRates.length > 0 ? `(${appliedRates.map((r) => `%${r}`).join(", ")})` : "";
+  return { tax: round2(totalTax), summary };
+}
+
+function getRowYear(row: CetvelRowForNet): number {
+  const dateStr = (row.startISO || row.start) as string | undefined;
+  return dateStr ? new Date(dateStr).getFullYear() : new Date().getFullYear();
+}
+
+function incrementalIncomeTax(year: number, prevCumMatrah: number, matrahSlice: number): number {
+  if (matrahSlice <= 0) return 0;
+  const newCum = prevCumMatrah + matrahSlice;
+  return round2(calculateIncomeTax(year, newCum) - calculateIncomeTax(year, prevCumMatrah));
+}
+
+function mergeBracketSummaries(summaries: string[]): string {
+  const rates = new Set<number>();
+  for (const summary of summaries) {
+    for (const match of summary.matchAll(/%(\d+)/g)) {
+      rates.add(Number(match[1]));
     }
   }
-  const summary = appliedRates.length > 0 ? `(${appliedRates.map((r) => `%${r}`).join(", ")})` : "";
-  return { tax, summary };
+  if (rates.size === 0) return "";
+  return `(${[...rates].sort((a, b) => a - b).map((r) => `%${r}`).join(", ")})`;
+}
+
+function computeAsgariIstisnalar(
+  gelirVergisi: number,
+  damgaVergisi: number,
+  year: number,
+  dateStr: string
+): { gelirIstisna: number; damgaIstisna: number } {
+  let gelirIstisna = 0;
+  let damgaIstisna = 0;
+  if (year >= 2022 && dateStr) {
+    const asgariBrut = getAsgariBrutForDate(dateStr);
+    if (asgariBrut != null && asgariBrut > 0) {
+      const asgariResult = calculateNetFromGross(asgariBrut, year);
+      gelirIstisna = Math.min(gelirVergisi, asgariResult.gelirVergisi);
+      damgaIstisna = Math.min(damgaVergisi, asgariResult.damgaVergisi);
+    }
+  }
+  return { gelirIstisna, damgaIstisna };
+}
+
+function computeGrossFromNetWithCumulativeTax(
+  netTarget: number,
+  year: number,
+  prevCumMatrah: number,
+  dateStr: string
+): {
+  gross: number;
+  sgk: number;
+  issizlik: number;
+  gelirVergisi: number;
+  gelirIstisna: number;
+  damgaVergisi: number;
+  damgaIstisna: number;
+  matrah: number;
+} {
+  if (netTarget <= 0) {
+    return {
+      gross: netTarget,
+      sgk: 0,
+      issizlik: 0,
+      gelirVergisi: 0,
+      gelirIstisna: 0,
+      damgaVergisi: 0,
+      damgaIstisna: 0,
+      matrah: 0,
+    };
+  }
+
+  let low = netTarget;
+  let high = netTarget * 2;
+  let gross = netTarget / 0.7;
+
+  for (let i = 0; i < 100; i++) {
+    gross = (low + high) / 2;
+    const sgk = round2(gross * SGK_ORAN);
+    const issizlik = round2(gross * ISSIZLIK_ORAN);
+    const matrah = gross - sgk - issizlik;
+    const gelirVergisi = incrementalIncomeTax(year, prevCumMatrah, matrah);
+    const damgaVergisi = round2(gross * DAMGA_ORAN);
+    const { gelirIstisna, damgaIstisna } = computeAsgariIstisnalar(gelirVergisi, damgaVergisi, year, dateStr);
+    const calculatedNet = round2(
+      gross - sgk - issizlik - (gelirVergisi - gelirIstisna) - (damgaVergisi - damgaIstisna)
+    );
+    if (Math.abs(calculatedNet - netTarget) < 0.005) break;
+    if (calculatedNet < netTarget) low = gross;
+    else high = gross;
+  }
+
+  gross = round2(gross);
+  const sgk = round2(gross * SGK_ORAN);
+  const issizlik = round2(gross * ISSIZLIK_ORAN);
+  const matrah = gross - sgk - issizlik;
+  const gelirVergisi = incrementalIncomeTax(year, prevCumMatrah, matrah);
+  const damgaVergisi = round2(gross * DAMGA_ORAN);
+  const { gelirIstisna, damgaIstisna } = computeAsgariIstisnalar(gelirVergisi, damgaVergisi, year, dateStr);
+
+  return { gross, sgk, issizlik, gelirVergisi, gelirIstisna, damgaVergisi, damgaIstisna, matrah };
+}
+
+function calcBrutToNetPerRowNet(rows: CetvelRowForNet[]): number[] {
+  const kalans = calcPeriodSliceRows(rows);
+  const sortedIndices = rows
+    .map((row, i) => ({ i, start: String(row.startISO || row.start || "") }))
+    .sort((a, b) => a.start.localeCompare(b.start));
+  const cumMatrahByYear = new Map<number, number>();
+  const rowNets = new Array<number>(rows.length).fill(0);
+
+  for (const { i } of sortedIndices) {
+    const row = rows[i];
+    const netBrut = kalans[i];
+    if (netBrut === 0) continue;
+    if (netBrut < 0) {
+      rowNets[i] = round2(netBrut);
+      continue;
+    }
+
+    const year = getRowYear(row);
+    const dateStr = String(row.startISO || row.start || "");
+    const sgk = round2(netBrut * SGK_ORAN);
+    const issizlik = round2(netBrut * ISSIZLIK_ORAN);
+    const matrah = netBrut - sgk - issizlik;
+    const prevCum = cumMatrahByYear.get(year) || 0;
+    const gelirVergisi = incrementalIncomeTax(year, prevCum, matrah);
+    cumMatrahByYear.set(year, prevCum + matrah);
+
+    const damgaVergisi = round2(netBrut * DAMGA_ORAN);
+    const { gelirIstisna, damgaIstisna } = computeAsgariIstisnalar(gelirVergisi, damgaVergisi, year, dateStr);
+    rowNets[i] = round2(
+      netBrut - sgk - issizlik - (gelirVergisi - gelirIstisna) - (damgaVergisi - damgaIstisna)
+    );
+  }
+
+  return rowNets;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -125,6 +280,7 @@ export interface SegmentedNetResult {
   totalDamgaVergisiIstisna: number;
   totalDamgaVergisi: number;
   totalNet: number;
+  gelirVergisiDilimleri: string;
 }
 
 export function calculateSegmentedNetFromRows(rows: CetvelRowForNet[]): SegmentedNetResult {
@@ -132,52 +288,91 @@ export function calculateSegmentedNetFromRows(rows: CetvelRowForNet[]): Segmente
   let totalGross = 0, totalSgk = 0, totalIssizlik = 0;
   let totalGelirVergisiBrut = 0, totalGelirVergisiIstisna = 0, totalGelirVergisi = 0;
   let totalDamgaVergisiBrut = 0, totalDamgaVergisiIstisna = 0, totalDamgaVergisi = 0;
-  let totalNet = 0;
+
+  const emptyResult = (): SegmentedNetResult => ({
+    totalGross: 0,
+    totalSgk: 0,
+    totalIssizlik: 0,
+    totalGelirVergisiBrut: 0,
+    totalGelirVergisiIstisna: 0,
+    totalGelirVergisi: 0,
+    totalDamgaVergisiBrut: 0,
+    totalDamgaVergisiIstisna: 0,
+    totalDamgaVergisi: 0,
+    totalNet: 0,
+    gelirVergisiDilimleri: "",
+  });
 
   if (!Array.isArray(rows) || rows.length === 0) {
-    return { totalGross: 0, totalSgk: 0, totalIssizlik: 0, totalGelirVergisiBrut: 0, totalGelirVergisiIstisna: 0, totalGelirVergisi: 0, totalDamgaVergisiBrut: 0, totalDamgaVergisiIstisna: 0, totalDamgaVergisi: 0, totalNet: 0 };
+    return emptyResult();
   }
 
-  const kalans = calcKalanRows(rows);
+  const kalans = calcPeriodSliceRows(rows);
+  const sortedIndices = rows
+    .map((row, i) => ({ i, start: String(row.startISO || row.start || "") }))
+    .sort((a, b) => a.start.localeCompare(b.start));
 
-  for (let i = 0; i < rows.length; i++) {
+  const cumMatrahByYear = new Map<number, number>();
+  const rowSgk = new Array<number>(rows.length).fill(0);
+  const rowIssizlik = new Array<number>(rows.length).fill(0);
+  const rowGelirBrut = new Array<number>(rows.length).fill(0);
+  const rowGelirIstisna = new Array<number>(rows.length).fill(0);
+  const rowDamgaBrut = new Array<number>(rows.length).fill(0);
+  const rowDamgaIstisna = new Array<number>(rows.length).fill(0);
+  const rowNetAdd = new Array<number>(rows.length).fill(0);
+
+  for (const { i } of sortedIndices) {
     const row = rows[i];
     const netBrut = kalans[i];
     if (netBrut === 0) continue;
+
     if (netBrut < 0) {
-      totalNet += z(netBrut);
+      rowNetAdd[i] = z(netBrut);
       continue;
     }
 
-    const year = row.startISO || row.start ? new Date((row.startISO || row.start) as string).getFullYear() : new Date().getFullYear();
-    const result = calculateNetFromGross(netBrut, year);
+    const year = getRowYear(row);
+    const sgk = z(netBrut * SGK_ORAN);
+    const issizlik = z(netBrut * ISSIZLIK_ORAN);
+    const matrah = netBrut - sgk - issizlik;
+    const prevCum = cumMatrahByYear.get(year) || 0;
+    const gelirVergisi = incrementalIncomeTax(year, prevCum, matrah);
+    cumMatrahByYear.set(year, prevCum + matrah);
 
-    let gelirIstisna = 0;
-    let damgaIstisna = 0;
-    if (year >= 2022 && netBrut > 0) {
-      const asgariBrut = getAsgariBrutForDate((row.startISO || row.start) as string);
-      if (asgariBrut != null && asgariBrut > 0) {
-        const asgariResult = calculateNetFromGross(asgariBrut, year);
-        gelirIstisna = Math.min(result.gelirVergisi, asgariResult.gelirVergisi);
-        damgaIstisna = Math.min(result.damgaVergisi, asgariResult.damgaVergisi);
-      }
-    }
+    const damgaVergisi = z(netBrut * DAMGA_ORAN);
+    const { gelirIstisna, damgaIstisna } = computeAsgariIstisnalar(
+      gelirVergisi,
+      damgaVergisi,
+      year,
+      String(row.startISO || row.start || "")
+    );
 
-    const net = netBrut - result.sgk - result.issizlik - (result.gelirVergisi - gelirIstisna) - (result.damgaVergisi - damgaIstisna);
-
-    totalNet += z(net);
+    rowSgk[i] = sgk;
+    rowIssizlik[i] = issizlik;
+    rowGelirBrut[i] = gelirVergisi;
+    rowGelirIstisna[i] = gelirIstisna;
+    rowDamgaBrut[i] = damgaVergisi;
+    rowDamgaIstisna[i] = damgaIstisna;
+    rowNetAdd[i] = z(
+      netBrut - sgk - issizlik - (gelirVergisi - gelirIstisna) - (damgaVergisi - damgaIstisna)
+    );
     totalGross += netBrut;
-    totalSgk += result.sgk;
-    totalIssizlik += result.issizlik;
-    totalGelirVergisiBrut += result.gelirVergisi;
-    totalGelirVergisiIstisna += gelirIstisna;
-    totalGelirVergisi += z(result.gelirVergisi - gelirIstisna);
-    totalDamgaVergisiBrut += result.damgaVergisi;
-    totalDamgaVergisiIstisna += damgaIstisna;
-    totalDamgaVergisi += z(result.damgaVergisi - damgaIstisna);
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    totalSgk += rowSgk[i];
+    totalIssizlik += rowIssizlik[i];
+    totalGelirVergisiBrut += rowGelirBrut[i];
+    totalGelirVergisiIstisna += rowGelirIstisna[i];
+    totalGelirVergisi += z(rowGelirBrut[i] - rowGelirIstisna[i]);
+    totalDamgaVergisiBrut += rowDamgaBrut[i];
+    totalDamgaVergisiIstisna += rowDamgaIstisna[i];
+    totalDamgaVergisi += z(rowDamgaBrut[i] - rowDamgaIstisna[i]);
   }
 
   const grandBrut = z(calcCetvelGrandTotal(rows));
+  const gelirVergisiDilimleri = computeGelirVergisiDilimleriFromMatrahByYear(cumMatrahByYear);
+
   return {
     totalGross: grandBrut,
     totalSgk: z(totalSgk),
@@ -189,6 +384,7 @@ export function calculateSegmentedNetFromRows(rows: CetvelRowForNet[]): Segmente
     totalDamgaVergisiIstisna: z(totalDamgaVergisiIstisna),
     totalDamgaVergisi: z(totalDamgaVergisi),
     totalNet: z(grandBrut - totalSgk - totalIssizlik - totalGelirVergisi - totalDamgaVergisi),
+    gelirVergisiDilimleri,
   };
 }
 
@@ -197,18 +393,6 @@ export function calculateSegmentedNetFromRows(rows: CetvelRowForNet[]): Segmente
  * Her satır önce brütten nete çevrilir, ardından aynı kurallarla netten brüte dönülür.
  */
 export function calculateSegmentedGrossFromBrutCetvelRows(rows: CetvelRowForNet[]): SegmentedNetResult {
-  const z = (v: number) => round2(v);
-  let totalGross = 0;
-  let totalSgk = 0;
-  let totalIssizlik = 0;
-  let totalGelirVergisiBrut = 0;
-  let totalGelirVergisiIstisna = 0;
-  let totalGelirVergisi = 0;
-  let totalDamgaVergisiBrut = 0;
-  let totalDamgaVergisiIstisna = 0;
-  let totalDamgaVergisi = 0;
-  let totalNet = 0;
-
   if (!Array.isArray(rows) || rows.length === 0) {
     return {
       totalGross: 0,
@@ -221,71 +405,32 @@ export function calculateSegmentedGrossFromBrutCetvelRows(rows: CetvelRowForNet[
       totalDamgaVergisiIstisna: 0,
       totalDamgaVergisi: 0,
       totalNet: 0,
+      gelirVergisiDilimleri: "",
     };
   }
 
-  const kalans = calcKalanRows(rows);
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const kalanBrut = kalans[i];
-    const netPeriod = netFromBrutKalanSlice(kalanBrut, row);
-    if (netPeriod <= 0) continue;
-
-    const dateStr = (row.startISO || row.start) as string;
-    const year = dateStr ? new Date(dateStr).getFullYear() : new Date().getFullYear();
-    const period = dateStr ? getPeriodFromDate(dateStr) : undefined;
-    const grossResult = computeGrossFromNetSingle(netPeriod, year, period, dateStr);
-
-    totalNet += z(netPeriod);
-    totalGross += grossResult.totalGross;
-    totalSgk += grossResult.totalSgk;
-    totalIssizlik += grossResult.totalIssizlik;
-    totalGelirVergisiBrut += grossResult.totalGelirVergisiBrut;
-    totalGelirVergisiIstisna += grossResult.totalGelirVergisiIstisna;
-    totalGelirVergisi += grossResult.totalGelirVergisi;
-    totalDamgaVergisiBrut += grossResult.totalDamgaVergisiBrut;
-    totalDamgaVergisiIstisna += grossResult.totalDamgaVergisiIstisna;
-    totalDamgaVergisi += grossResult.totalDamgaVergisi;
-  }
-
+  const rowNets = calcBrutToNetPerRowNet(rows);
+  const grossResult = segmentedGrossFromNetTargets(rows, rowNets);
   const netTotals = calculateSegmentedNetFromRows(rows);
 
   return {
-    totalGross: z(totalGross),
-    totalSgk: z(totalSgk),
-    totalIssizlik: z(totalIssizlik),
-    totalGelirVergisiBrut: z(totalGelirVergisiBrut),
-    totalGelirVergisiIstisna: z(totalGelirVergisiIstisna),
-    totalGelirVergisi: z(totalGelirVergisi),
-    totalDamgaVergisiBrut: z(totalDamgaVergisiBrut),
-    totalDamgaVergisiIstisna: z(totalDamgaVergisiIstisna),
-    totalDamgaVergisi: z(totalDamgaVergisi),
+    ...grossResult,
     totalNet: netTotals.totalNet,
+    gelirVergisiDilimleri: grossResult.gelirVergisiDilimleri || netTotals.gelirVergisiDilimleri,
   };
 }
 
-function netFromBrutKalanSlice(kalanBrut: number, row: CetvelRowForNet): number {
-  const z = round2;
-  if (kalanBrut === 0) return 0;
-  if (kalanBrut < 0) return z(kalanBrut);
-  const year = row.startISO || row.start ? new Date((row.startISO || row.start) as string).getFullYear() : new Date().getFullYear();
-  const result = calculateNetFromGross(kalanBrut, year);
-  let gelirIstisna = 0;
-  let damgaIstisna = 0;
-  if (year >= 2022 && kalanBrut > 0) {
-    const asgariBrut = getAsgariBrutForDate((row.startISO || row.start) as string);
-    if (asgariBrut != null && asgariBrut > 0) {
-      const asgariResult = calculateNetFromGross(asgariBrut, year);
-      gelirIstisna = Math.min(result.gelirVergisi, asgariResult.gelirVergisi);
-      damgaIstisna = Math.min(result.damgaVergisi, asgariResult.damgaVergisi);
+function computeGelirVergisiDilimleriFromMatrahByYear(matrahByYear: Map<number, number>): string {
+  const summaries: string[] = [];
+  for (const [year, matrah] of matrahByYear) {
+    if (matrah > 0) {
+      summaries.push(calculateIncomeTaxWithBrackets(year, matrah).summary);
     }
   }
-  return z(kalanBrut - result.sgk - result.issizlik - (result.gelirVergisi - gelirIstisna) - (result.damgaVergisi - damgaIstisna));
+  return mergeBracketSummaries(summaries);
 }
 
-/** Net cetvel satırlarından dönem bazlı netten brüte toplam (Brütten Nete'nin tersi). */
-export function calculateSegmentedGrossFromNetRows(rows: CetvelRowForNet[]): SegmentedNetResult {
+function segmentedGrossFromNetTargets(rows: CetvelRowForNet[], netTargets: number[]): SegmentedNetResult {
   const z = (v: number) => round2(v);
   let totalGross = 0;
   let totalSgk = 0;
@@ -296,48 +441,38 @@ export function calculateSegmentedGrossFromNetRows(rows: CetvelRowForNet[]): Seg
   let totalDamgaVergisiBrut = 0;
   let totalDamgaVergisiIstisna = 0;
   let totalDamgaVergisi = 0;
-  let totalNet = 0;
 
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return {
-      totalGross: 0,
-      totalSgk: 0,
-      totalIssizlik: 0,
-      totalGelirVergisiBrut: 0,
-      totalGelirVergisiIstisna: 0,
-      totalGelirVergisi: 0,
-      totalDamgaVergisiBrut: 0,
-      totalDamgaVergisiIstisna: 0,
-      totalDamgaVergisi: 0,
-      totalNet: 0,
-    };
-  }
+  const sortedIndices = rows
+    .map((row, i) => ({ i, start: String(row.startISO || row.start || "") }))
+    .sort((a, b) => a.start.localeCompare(b.start));
+  const cumMatrahByYear = new Map<number, number>();
 
-  const kalans = calcKalanRows(rows);
-
-  for (let i = 0; i < rows.length; i++) {
+  for (const { i } of sortedIndices) {
     const row = rows[i];
-    const netPeriod = kalans[i];
+    const netPeriod = netTargets[i];
     if (netPeriod <= 0) {
       totalGross += z(netPeriod);
       continue;
     }
 
-    const dateStr = (row.startISO || row.start) as string;
-    const year = dateStr ? new Date(dateStr).getFullYear() : new Date().getFullYear();
-    const period = dateStr ? getPeriodFromDate(dateStr) : undefined;
-    const result = computeGrossFromNetSingle(netPeriod, year, period, dateStr);
+    const dateStr = String(row.startISO || row.start || "");
+    const year = getRowYear(row);
+    const prevCum = cumMatrahByYear.get(year) || 0;
+    const result = computeGrossFromNetWithCumulativeTax(netPeriod, year, prevCum, dateStr);
+    cumMatrahByYear.set(year, prevCum + result.matrah);
 
-    totalGross += result.totalGross;
-    totalSgk += result.totalSgk;
-    totalIssizlik += result.totalIssizlik;
-    totalGelirVergisiBrut += result.totalGelirVergisiBrut;
-    totalGelirVergisiIstisna += result.totalGelirVergisiIstisna;
-    totalGelirVergisi += result.totalGelirVergisi;
-    totalDamgaVergisiBrut += result.totalDamgaVergisiBrut;
-    totalDamgaVergisiIstisna += result.totalDamgaVergisiIstisna;
-    totalDamgaVergisi += result.totalDamgaVergisi;
+    totalGross += result.gross;
+    totalSgk += result.sgk;
+    totalIssizlik += result.issizlik;
+    totalGelirVergisiBrut += result.gelirVergisi;
+    totalGelirVergisiIstisna += result.gelirIstisna;
+    totalGelirVergisi += z(result.gelirVergisi - result.gelirIstisna);
+    totalDamgaVergisiBrut += result.damgaVergisi;
+    totalDamgaVergisiIstisna += result.damgaIstisna;
+    totalDamgaVergisi += z(result.damgaVergisi - result.damgaIstisna);
   }
+
+  const gelirVergisiDilimleri = computeGelirVergisiDilimleriFromMatrahByYear(cumMatrahByYear);
 
   return {
     totalGross: z(totalGross),
@@ -350,7 +485,29 @@ export function calculateSegmentedGrossFromNetRows(rows: CetvelRowForNet[]): Seg
     totalDamgaVergisiIstisna: z(totalDamgaVergisiIstisna),
     totalDamgaVergisi: z(totalDamgaVergisi),
     totalNet: z(calcCetvelGrandTotal(rows)),
+    gelirVergisiDilimleri,
   };
+}
+
+/** Net cetvel satırlarından dönem bazlı netten brüte toplam (Brütten Nete'nin tersi). */
+export function calculateSegmentedGrossFromNetRows(rows: CetvelRowForNet[]): SegmentedNetResult {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return {
+      totalGross: 0,
+      totalSgk: 0,
+      totalIssizlik: 0,
+      totalGelirVergisiBrut: 0,
+      totalGelirVergisiIstisna: 0,
+      totalGelirVergisi: 0,
+      totalDamgaVergisiBrut: 0,
+      totalDamgaVergisiIstisna: 0,
+      totalDamgaVergisi: 0,
+      totalNet: 0,
+      gelirVergisiDilimleri: "",
+    };
+  }
+
+  return segmentedGrossFromNetTargets(rows, calcPeriodSliceRows(rows));
 }
 
 /**
@@ -397,6 +554,7 @@ export function computeNetFromGrossSingle(
       totalDamgaVergisiIstisna: 0,
       totalDamgaVergisi: 0,
       totalNet: 0,
+      gelirVergisiDilimleri: "",
     };
   }
   const row: CetvelRowForNet = {
@@ -432,6 +590,7 @@ export function computeGrossFromNetSingle(
       totalDamgaVergisiIstisna: 0,
       totalDamgaVergisi: 0,
       totalNet: 0,
+      gelirVergisiDilimleri: "",
     };
   }
   const rowStartISO = startISO || getStartISOForYearPeriod(year, period);

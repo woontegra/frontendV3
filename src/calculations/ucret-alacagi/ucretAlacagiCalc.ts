@@ -34,19 +34,22 @@ export function monthlyUcretFromHakEdis(hakEdis: number, row: CetvelRowLike): nu
 }
 
 /**
- * Satır bazlı kalan: artı/eksi fark yalnızca bir sonraki satıra devreder.
- * satırKalan = hakEdiş + carryIn - ödenen
- * Ödenen > 0 ise nextCarry = satırKalan; aksi halde nextCarry = 0
+ * Birikimli cari bakiye: o satıra kadar hak edişler − ödemeler.
+ * kalan[i] = kalan[i-1] + hakEdiş[i] − ödenen[i]  (ilk satır: hakEdiş − ödenen)
  */
 export function calcKalanRows(rows: CetvelRowLike[]): number[] {
-  let carry = 0;
+  let running = 0;
   return rows.map((row) => {
     const hak = calcRowUcretBase(row);
     const odenen = row.odenenUcret || 0;
-    const kalan = round2(hak + carry - odenen);
-    carry = odenen > 0 ? kalan : 0;
-    return kalan;
+    running = round2(running + hak - odenen);
+    return running;
   });
+}
+
+/** Dönem bazlı net etki (hak ediş − ödenen); brütten/nete vergi çevrimi için. */
+export function calcPeriodSliceRows(rows: CetvelRowLike[]): number[] {
+  return rows.map((row) => round2(calcRowUcretBase(row) - (row.odenenUcret || 0)));
 }
 
 export function calcRowKalan(rows: CetvelRowLike[], index: number): number {
