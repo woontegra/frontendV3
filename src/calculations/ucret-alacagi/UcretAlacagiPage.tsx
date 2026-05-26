@@ -5,7 +5,7 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getDaysInMonth } from "date-fns";
-import { Video } from "lucide-react";
+import { Video, Copy } from "lucide-react";
 import FooterActions from "@/components/FooterActions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +27,9 @@ import {
 import { UcretConversionCards, EMPTY_CONVERSION_PANEL, type ConversionPanelData } from "./UcretConversionCards";
 import { ReportContentFromConfig } from "@/components/report";
 import type { ReportConfig } from "@/components/report";
+import { buildWordTable } from "@/utils/wordTableBuilder";
+import { adaptToWordTable } from "@/utils/wordTableAdapter";
+import { copySectionForWord } from "@/utils/copyTableForWord";
 import { downloadPdfFromDOM } from "@/utils/pdfExport";
 import { loadSavedCase } from "@/calculations/shared/loadSavedCase";
 import { ManualBrutWageApplyControls } from "@/features/manual-brut-wage/ManualBrutWageApplyControls";
@@ -192,8 +195,10 @@ function mergeNetCetvelWithApi(
   });
 }
 
-function cetvelRowBgCls(idx: number, hasOdenen: boolean): string {
-  if (hasOdenen) return "bg-red-50/90 dark:bg-red-950/30";
+function cetvelRowBgCls(idx: number, isOdenenFocused: boolean): string {
+  if (isOdenenFocused) {
+    return "bg-red-50 dark:bg-red-950/40 ring-2 ring-inset ring-red-300 dark:ring-red-700";
+  }
   return idx % 2 === 0 ? "bg-white dark:bg-gray-900" : "bg-gray-50/50 dark:bg-gray-800/80";
 }
 
@@ -375,6 +380,43 @@ function buildUcretReportConfig(params: {
   };
 }
 
+function buildWordTableSectionsFromConfig(config: ReportConfig) {
+  const sections: Array<{ id: string; title: string; html: string }> = [];
+
+  const infoRowsFiltered = (config.infoRows || []).filter((r) => r.condition !== false);
+  if (infoRowsFiltered.length > 0) {
+    const n1 = adaptToWordTable({
+      headers: ["Alan", "Değer"],
+      rows: infoRowsFiltered.map((r) => [r.label, String(r.value ?? "-")]),
+    });
+    sections.push({ id: "ust-bilgiler", title: "Genel Bilgiler", html: buildWordTable(n1.headers, n1.rows) });
+  }
+
+  const pd = config.periodData;
+  if (pd?.rows?.length) {
+    const periodRows = [...pd.rows];
+    if (pd.footer?.length) periodRows.push(pd.footer);
+    const n2 = adaptToWordTable({ headers: pd.headers, rows: periodRows });
+    sections.push({
+      id: "ucret-hesaplama",
+      title: pd.title || "Ücret Hesaplama Cetveli",
+      html: buildWordTable(n2.headers, n2.rows),
+    });
+  }
+
+  const gnd = config.grossToNetData?.rows;
+  if (gnd?.length) {
+    const n3 = adaptToWordTable(gnd);
+    sections.push({
+      id: "brutten-nete",
+      title: config.grossToNetData?.title || "Brütten Nete Çeviri",
+      html: buildWordTable(n3.headers, n3.rows),
+    });
+  }
+
+  return sections;
+}
+
 function mapSavedCetvelRows(rowsSource: unknown[]): CetvelRow[] {
   return rowsSource.map((r: Record<string, unknown>) => {
     const odenenRaw = r.odenenUcret ?? r.odenen_ucret ?? r.OdenenUcret ?? 0;
@@ -462,6 +504,7 @@ export default function UcretAlacagiPage() {
   const [currentRecordName, setCurrentRecordName] = useState<string | null>(null);
   const [manualWageFromTemplateActive, setManualWageFromTemplateActive] = useState(false);
   const [activeTab, setActiveTab] = useState<HesaplamaTab>("brut");
+  const [focusedOdenenRowId, setFocusedOdenenRowId] = useState<string | null>(null);
   const [netCetvelRows, setNetCetvelRows] = useState<CetvelRow[]>([]);
   const [showNetCetvel, setShowNetCetvel] = useState(false);
   const [netGlobalKatsayi, setNetGlobalKatsayi] = useState(1);
@@ -1215,10 +1258,10 @@ export default function UcretAlacagiPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-600 pb-2">
-                  <button type="button" className={tabBtnCls(activeTab === "brut")} onClick={() => setActiveTab("brut")}>
+                  <button type="button" className={tabBtnCls(activeTab === "brut")} onClick={() => { setFocusedOdenenRowId(null); setActiveTab("brut"); }}>
                     Brütten Hesaplama
                   </button>
-                  <button type="button" className={tabBtnCls(activeTab === "net")} onClick={() => setActiveTab("net")}>
+                  <button type="button" className={tabBtnCls(activeTab === "net")} onClick={() => { setFocusedOdenenRowId(null); setActiveTab("net"); }}>
                     Netten Hesaplama
                   </button>
                 </div>
@@ -1279,11 +1322,11 @@ export default function UcretAlacagiPage() {
                               ? row.ucret * row.katsayi
                               : (row.ucret / 30) * row.gunSayisi * row.katsayi;
                             const rowNet = Math.max(0, rowBrut - (row.odenenUcret || 0));
-                            const hasOdenen = (row.odenenUcret ?? 0) > 0;
+                            const hasOdenenFocus = focusedOdenenRowId === row.id;
                             return (
                               <tr
                                 key={row.id}
-                                className={`border-b border-gray-100 dark:border-gray-700 ${cetvelRowBgCls(idx, hasOdenen)}`}
+                                className={`border-b border-gray-100 dark:border-gray-700 ${cetvelRowBgCls(idx, hasOdenenFocus)}`}
                               >
                                 <td className="px-2 py-2 text-gray-800 dark:text-gray-200 font-medium">{row.rangeLabel}</td>
                                 <td className="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{row.gunSayisi}</td>
@@ -1318,9 +1361,12 @@ export default function UcretAlacagiPage() {
                                     data-odenen-row={row.id}
                                     defaultValue={row.odenenUcret ? fmtCurrency(row.odenenUcret) : ""}
                                     placeholder="0"
-                                    onChange={(e) => handleOdenenUcretBlur(row.id, e.target.value)}
-                                    onBlur={(e) => handleOdenenUcretBlur(row.id, e.target.value)}
-                                    className="w-20 text-right border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 text-xs bg-white/80 dark:bg-gray-800/80"
+                                    onFocus={() => setFocusedOdenenRowId(row.id)}
+                                    onBlur={(e) => {
+                                      handleOdenenUcretBlur(row.id, e.target.value);
+                                      setFocusedOdenenRowId(null);
+                                    }}
+                                    className="w-20 text-right border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 text-xs bg-white dark:bg-gray-800"
                                   />
                                 </td>
                                 <td className="px-2 py-2 text-right font-semibold text-gray-800 dark:text-gray-200">
@@ -1413,11 +1459,11 @@ export default function UcretAlacagiPage() {
                             <tbody>
                               {netCetvelRows.map((row, idx) => {
                                 const rowTotal = calcRowUcretTotal(row);
-                                const hasOdenen = (row.odenenUcret ?? 0) > 0;
+                                const hasOdenenFocus = focusedOdenenRowId === row.id;
                                 return (
                                   <tr
                                     key={row.id}
-                                    className={`border-b border-gray-100 dark:border-gray-700 ${cetvelRowBgCls(idx, hasOdenen)}`}
+                                    className={`border-b border-gray-100 dark:border-gray-700 ${cetvelRowBgCls(idx, hasOdenenFocus)}`}
                                   >
                                     <td className="px-2 py-2 text-gray-800 dark:text-gray-200 font-medium">{row.rangeLabel}</td>
                                     <td className="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{row.gunSayisi}</td>
@@ -1463,9 +1509,12 @@ export default function UcretAlacagiPage() {
                                         data-net-odenen-row={row.id}
                                         defaultValue={row.odenenUcret ? fmtCurrency(row.odenenUcret) : ""}
                                         placeholder="0"
-                                        onChange={(e) => handleNetOdenenUcretBlur(row.id, e.target.value)}
-                                        onBlur={(e) => handleNetOdenenUcretBlur(row.id, e.target.value)}
-                                        className="w-20 text-right border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 text-xs bg-white/80 dark:bg-gray-800/80"
+                                        onFocus={() => setFocusedOdenenRowId(row.id)}
+                                        onBlur={(e) => {
+                                          handleNetOdenenUcretBlur(row.id, e.target.value);
+                                          setFocusedOdenenRowId(null);
+                                        }}
+                                        className="w-20 text-right border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 text-xs bg-white dark:bg-gray-800"
                                       />
                                     </td>
                                     <td className="px-2 py-2 text-right font-semibold text-gray-800 dark:text-gray-200">
@@ -1545,20 +1594,50 @@ export default function UcretAlacagiPage() {
         onPrint={handlePrint}
         previewButton={{
           title: PREVIEW_TITLE,
-          copyTargetId: "report-modal-content",
+          copyTargetId: "ucret-alacagi-word-copy",
           hideWordDownload: true,
           renderContent: () => {
             if (document.activeElement instanceof HTMLInputElement) {
               document.activeElement.blur();
             }
             const previewConfig = buildPreviewReportConfig();
+            const previewSections = buildWordTableSectionsFromConfig(previewConfig);
             return (
               <div style={{ background: "white", padding: 24 }}>
-                <ReportContentFromConfig config={previewConfig} />
+                <style>{`
+                .report-section-copy { margin-bottom: 20px; }
+                .report-section-copy .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+                .report-section-copy .section-title { font-weight: 600; font-size: 13px; }
+                .report-section-copy .copy-icon-btn { background: transparent; border: none; cursor: pointer; opacity: 0.7; padding: 4px; }
+                .report-section-copy .copy-icon-btn:hover { opacity: 1; }
+                #ucret-alacagi-word-copy table { border-collapse: collapse; width: 100%; margin-bottom: 12px; border: 1px solid #999; font-size: 9px; }
+                #ucret-alacagi-word-copy td { border: 1px solid #999; padding: 4px 6px; }
+              `}</style>
+                <div id="ucret-alacagi-word-copy">
+                  {previewSections.map((sec) => (
+                    <div key={sec.id} className="report-section-copy report-section" data-section={sec.id}>
+                      <div className="section-header">
+                        <span className="section-title">{sec.title}</span>
+                        <button
+                          type="button"
+                          className="copy-icon-btn"
+                          onClick={async () => {
+                            const ok = await copySectionForWord(sec.id);
+                            if (ok) success("Kopyalandı");
+                          }}
+                          title="Word'e kopyala"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="section-content" dangerouslySetInnerHTML={{ __html: sec.html }} />
+                    </div>
+                  ))}
+                </div>
               </div>
             );
           },
-          onPdf: () => downloadPdfFromDOM(PREVIEW_TITLE, "report-modal-content"),
+          onPdf: () => downloadPdfFromDOM(PREVIEW_TITLE, "ucret-alacagi-word-copy"),
         }}
       />
     </>
