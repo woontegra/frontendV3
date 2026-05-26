@@ -22,7 +22,9 @@ import { calcWorkPeriodBilirKisi } from "@/calculations/ihbar-tazminati/utils";
 import {
   calculateSegmentedNetFromRows,
   calculateSegmentedGrossFromNetRows,
+  calculateSegmentedGrossFromBrutCetvelRows,
   computeNetFromGrossSingle,
+  computeGrossFromNetSingle,
 } from "./incomeTaxCore";
 import { UcretConversionCards, EMPTY_CONVERSION_PANEL, type ConversionPanelData } from "./UcretConversionCards";
 import { ReportContentFromConfig } from "@/components/report";
@@ -589,15 +591,49 @@ export default function UcretAlacagiPage() {
     };
   }, [netCetvelRows]);
 
-  const [grossFromNet, setGrossFromNet] = useState<ConversionPanelData>(EMPTY_CONVERSION_PANEL);
   const netVal = useMemo(() => parseNum(netForGross), [netForGross]);
   const netTabGrossVal = useMemo(() => parseNum(netTabGrossForNet), [netTabGrossForNet]);
 
-  const netTabNetFromGrossManual = useMemo((): ConversionPanelData => {
-    if (netTabGrossVal <= 0) return EMPTY_CONVERSION_PANEL;
-    const d = computeNetFromGrossSingle(netTabGrossVal, selectedYear);
+  const brutTabGrossFromNetManual = useMemo((): ConversionPanelData => {
+    if (netVal <= 0) return EMPTY_CONVERSION_PANEL;
+
+    const cetvelNet = netFromGross.net;
+    const useSegmented =
+      cetvelRows.length > 0 && cetvelNet > 0 && Math.abs(netVal - cetvelNet) < 0.02;
+
+    const d = useSegmented
+      ? calculateSegmentedGrossFromBrutCetvelRows(cetvelRows)
+      : computeGrossFromNetSingle(netVal, selectedYear);
+
     return {
       gross: d.totalGross,
+      net: useSegmented ? netVal : d.totalNet,
+      sgk: d.totalSgk,
+      issizlik: d.totalIssizlik,
+      gelirVergisi: d.totalGelirVergisi,
+      gelirVergisiBrut: d.totalGelirVergisiBrut,
+      gelirVergisiIstisna: d.totalGelirVergisiIstisna,
+      gelirVergisiDilimleri: "",
+      damgaVergisi: d.totalDamgaVergisi,
+      damgaVergisiBrut: d.totalDamgaVergisiBrut,
+      damgaVergisiIstisna: d.totalDamgaVergisiIstisna,
+    };
+  }, [netVal, selectedYear, cetvelRows, netFromGross.net]);
+
+  const netTabNetFromGrossManual = useMemo((): ConversionPanelData => {
+    if (netTabGrossVal <= 0) return EMPTY_CONVERSION_PANEL;
+
+    const eligible = netCetvelRows.filter((row) => row.ucret > 0 && (!row.netVerisiYok || row.ucretManual));
+    const cetvelGross = netTabGrossFromCetvel.gross;
+    const useSegmented =
+      eligible.length > 0 && cetvelGross > 0 && Math.abs(netTabGrossVal - cetvelGross) < 0.02;
+
+    const d = useSegmented
+      ? calculateSegmentedGrossFromNetRows(eligible)
+      : computeNetFromGrossSingle(netTabGrossVal, selectedYear);
+
+    return {
+      gross: useSegmented ? netTabGrossVal : d.totalGross,
       sgk: d.totalSgk,
       issizlik: d.totalIssizlik,
       gelirVergisi: d.totalGelirVergisi,
@@ -609,28 +645,7 @@ export default function UcretAlacagiPage() {
       damgaVergisiIstisna: d.totalDamgaVergisiIstisna,
       net: d.totalNet,
     };
-  }, [netTabGrossVal, selectedYear]);
-
-  const fetchGrossFromNet = useCallback((net: number, year: number, onResult: (data: ConversionPanelData) => void) => {
-    if (net <= 0) {
-      onResult(EMPTY_CONVERSION_PANEL);
-      return;
-    }
-    apiClient(`/api/ucret-alacagi/gross-from-net`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ net, year }),
-    })
-      .then((res) => res.json())
-      .then((result) => {
-        if (result.success && result.data) onResult(result.data as ConversionPanelData);
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    fetchGrossFromNet(netVal, selectedYear, setGrossFromNet);
-  }, [netVal, selectedYear, fetchGrossFromNet]);
+  }, [netTabGrossVal, selectedYear, netCetvelRows, netTabGrossFromCetvel.gross]);
 
   const totalBrut = useMemo(() => {
     const brutToplam = cetvelRows.reduce((acc, row) => {
@@ -1409,7 +1424,7 @@ export default function UcretAlacagiPage() {
                   cetvelRows.length > 0 ? `Cetvelden: ${fmtCurrency(totalBrut)}₺` : "Cetvel oluşturun"
                 }
                 netFromGross={netFromGross}
-                grossFromNet={grossFromNet}
+                grossFromNet={brutTabGrossFromNetManual}
                 manualInput={netForGross}
                 onManualInputChange={setNetForGross}
                 onUseLeftPanelValue={() => setNetForGross(fmtCurrency(netFromGross.net))}

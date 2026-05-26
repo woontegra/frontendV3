@@ -189,6 +189,74 @@ export function calculateSegmentedNetFromRows(rows: CetvelRowForNet[]): Segmente
   };
 }
 
+/**
+ * Brüt cetvel satırlarından dönem bazlı netten brüte (Brütten Nete'nin tersi).
+ * Her satır önce brütten nete çevrilir, ardından aynı kurallarla netten brüte dönülür.
+ */
+export function calculateSegmentedGrossFromBrutCetvelRows(rows: CetvelRowForNet[]): SegmentedNetResult {
+  const z = (v: number) => round2(v);
+  let totalGross = 0;
+  let totalSgk = 0;
+  let totalIssizlik = 0;
+  let totalGelirVergisiBrut = 0;
+  let totalGelirVergisiIstisna = 0;
+  let totalGelirVergisi = 0;
+  let totalDamgaVergisiBrut = 0;
+  let totalDamgaVergisiIstisna = 0;
+  let totalDamgaVergisi = 0;
+  let totalNet = 0;
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return {
+      totalGross: 0,
+      totalSgk: 0,
+      totalIssizlik: 0,
+      totalGelirVergisiBrut: 0,
+      totalGelirVergisiIstisna: 0,
+      totalGelirVergisi: 0,
+      totalDamgaVergisiBrut: 0,
+      totalDamgaVergisiIstisna: 0,
+      totalDamgaVergisi: 0,
+      totalNet: 0,
+    };
+  }
+
+  for (const row of rows) {
+    const netRow = calculateSegmentedNetFromRows([row]);
+    const netPeriod = netRow.totalNet;
+    if (netPeriod <= 0) continue;
+
+    const dateStr = (row.startISO || row.start) as string;
+    const year = dateStr ? new Date(dateStr).getFullYear() : new Date().getFullYear();
+    const period = dateStr ? getPeriodFromDate(dateStr) : undefined;
+    const grossResult = computeGrossFromNetSingle(netPeriod, year, period, dateStr);
+
+    totalNet += z(netPeriod);
+    totalGross += grossResult.totalGross;
+    totalSgk += grossResult.totalSgk;
+    totalIssizlik += grossResult.totalIssizlik;
+    totalGelirVergisiBrut += grossResult.totalGelirVergisiBrut;
+    totalGelirVergisiIstisna += grossResult.totalGelirVergisiIstisna;
+    totalGelirVergisi += grossResult.totalGelirVergisi;
+    totalDamgaVergisiBrut += grossResult.totalDamgaVergisiBrut;
+    totalDamgaVergisiIstisna += grossResult.totalDamgaVergisiIstisna;
+    totalDamgaVergisi += grossResult.totalDamgaVergisi;
+  }
+
+  return {
+    totalGross: z(totalGross),
+    totalSgk: z(totalSgk),
+    totalIssizlik: z(totalIssizlik),
+    totalGelirVergisiBrut: z(totalGelirVergisiBrut),
+    totalGelirVergisiIstisna: z(totalGelirVergisiIstisna),
+    totalGelirVergisi: z(totalGelirVergisi),
+    totalDamgaVergisiBrut: z(totalDamgaVergisiBrut),
+    totalDamgaVergisiIstisna: z(totalDamgaVergisiIstisna),
+    totalDamgaVergisi: z(totalDamgaVergisi),
+    totalNet: z(totalNet),
+  };
+}
+
 /** Net cetvel satırlarından dönem bazlı netten brüte toplam (Brütten Nete'nin tersi). */
 export function calculateSegmentedGrossFromNetRows(rows: CetvelRowForNet[]): SegmentedNetResult {
   const z = (v: number) => round2(v);
@@ -229,8 +297,10 @@ export function calculateSegmentedGrossFromNetRows(rows: CetvelRowForNet[]): Seg
     const netPeriod = Math.max(0, netAmount - odenenUcret);
     if (netPeriod <= 0) continue;
 
-    const year = row.startISO || row.start ? new Date((row.startISO || row.start) as string).getFullYear() : new Date().getFullYear();
-    const result = computeGrossFromNetSingle(netPeriod, year);
+    const dateStr = (row.startISO || row.start) as string;
+    const year = dateStr ? new Date(dateStr).getFullYear() : new Date().getFullYear();
+    const period = dateStr ? getPeriodFromDate(dateStr) : undefined;
+    const result = computeGrossFromNetSingle(netPeriod, year, period, dateStr);
 
     totalNet += z(netPeriod);
     totalGross += result.totalGross;
@@ -259,10 +329,24 @@ export function calculateSegmentedGrossFromNetRows(rows: CetvelRowForNet[]): Seg
 }
 
 /**
+ * Cetvel brütü geri çevrilirken sol panel (netten brüte) ile aynı satır bazlı sonuçları kullanır.
+ * computeGrossFromNetSingle zaten hedef net için brüt + kesinti döndürür; yeniden brütten nete
+ * hesaplamak kısmi ay / katsayı satırlarında istisna farkı oluşturuyordu.
+ */
+export function calculateSegmentedNetFromNetCetvelRows(rows: CetvelRowForNet[]): SegmentedNetResult {
+  return calculateSegmentedGrossFromNetRows(rows);
+}
+
+/**
  * Yıl ve döneme göre startISO (asgari ücret seçimi için)
  */
 function getStartISOForYearPeriod(year: number, period?: 1 | 2): string {
   return period === 2 ? `${year}-07-15` : `${year}-06-15`;
+}
+
+function getPeriodFromDate(dateStr: string): 1 | 2 {
+  const month = new Date(dateStr).getMonth();
+  return month < 6 ? 1 : 2;
 }
 
 /**
@@ -273,7 +357,8 @@ function getStartISOForYearPeriod(year: number, period?: 1 | 2): string {
 export function computeNetFromGrossSingle(
   gross: number,
   year: number,
-  period?: 1 | 2
+  period?: 1 | 2,
+  startISO?: string
 ): SegmentedNetResult {
   if (!gross || gross <= 0) {
     return {
@@ -294,7 +379,7 @@ export function computeNetFromGrossSingle(
     katsayi: 1,
     gunSayisi: 30,
     ayGunSayisi: 30,
-    startISO: getStartISOForYearPeriod(year, period),
+    startISO: startISO || getStartISOForYearPeriod(year, period),
   };
   return calculateSegmentedNetFromRows([row]);
 }
@@ -304,7 +389,12 @@ export function computeNetFromGrossSingle(
  * computeNetFromGrossSingle'ın tersi.
  * @param period - 1: Ocak-Haziran, 2: Temmuz-Aralık (asgari ücret dönemi)
  */
-export function computeGrossFromNetSingle(netInput: number, year: number, period?: 1 | 2): SegmentedNetResult {
+export function computeGrossFromNetSingle(
+  netInput: number,
+  year: number,
+  period?: 1 | 2,
+  startISO?: string
+): SegmentedNetResult {
   if (!netInput || netInput <= 0) {
     return {
       totalGross: 0,
@@ -319,12 +409,13 @@ export function computeGrossFromNetSingle(netInput: number, year: number, period
       totalNet: 0,
     };
   }
+  const rowStartISO = startISO || getStartISOForYearPeriod(year, period);
   let low = netInput;
   let high = netInput * 2;
   let gross = netInput / 0.7;
   for (let i = 0; i < 100; i++) {
     gross = (low + high) / 2;
-    const res = computeNetFromGrossSingle(gross, year, period);
+    const res = computeNetFromGrossSingle(gross, year, period, rowStartISO);
     const calculatedNet = round2(res.totalNet);
     if (Math.abs(calculatedNet - netInput) < 0.005) break;
     if (calculatedNet < netInput) low = gross;
@@ -332,9 +423,9 @@ export function computeGrossFromNetSingle(netInput: number, year: number, period
   }
   gross = round2(gross);
   const grossPlus1 = round2(gross + 0.01);
-  const resPlus = computeNetFromGrossSingle(grossPlus1, year, period);
+  const resPlus = computeNetFromGrossSingle(grossPlus1, year, period, rowStartISO);
   if (round2(resPlus.totalNet) === round2(netInput)) {
-    return { ...computeNetFromGrossSingle(grossPlus1, year, period), totalGross: grossPlus1 };
+    return { ...computeNetFromGrossSingle(grossPlus1, year, period, rowStartISO), totalGross: grossPlus1 };
   }
-  return { ...computeNetFromGrossSingle(gross, year, period), totalGross: gross };
+  return { ...computeNetFromGrossSingle(gross, year, period, rowStartISO), totalGross: gross };
 }
