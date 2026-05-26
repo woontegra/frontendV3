@@ -19,7 +19,12 @@ import { apiClient } from "@/utils/apiClient";
 import { asgariUcretler, getAsgariUcretByDate } from "@modules/fazla-mesai/shared";
 import type { FazlaMesaiRowBase } from "@modules/fazla-mesai/shared";
 import { calcWorkPeriodBilirKisi } from "@/calculations/ihbar-tazminati/utils";
-import { calculateSegmentedNetFromRows } from "./incomeTaxCore";
+import {
+  calculateSegmentedNetFromRows,
+  calculateSegmentedGrossFromNetRows,
+  computeNetFromGrossSingle,
+} from "./incomeTaxCore";
+import { UcretConversionCards, EMPTY_CONVERSION_PANEL, type ConversionPanelData } from "./UcretConversionCards";
 import { ReportContentFromConfig } from "@/components/report";
 import type { ReportConfig } from "@/components/report";
 import { buildWordTable } from "@/utils/wordTableBuilder";
@@ -29,6 +34,13 @@ import { downloadPdfFromDOM } from "@/utils/pdfExport";
 import { loadSavedCase } from "@/calculations/shared/loadSavedCase";
 import { ManualBrutWageApplyControls } from "@/features/manual-brut-wage/ManualBrutWageApplyControls";
 import UbgtKatsayiModal from "./UbgtKatsayiModal";
+import { getAsgariNetUcretForPeriod } from "./asgariNetUcretler";
+import {
+  NET_CETVEL_FOOTER,
+  calcCetvelGrandTotal,
+  calcRowUcretTotal,
+  type HesaplamaTab,
+} from "./ucretAlacagiCalc";
 
 const PAGE_HEADING = "Ücret Alacağı";
 const PREVIEW_TITLE = "Ücret Alacağı Rapor";
@@ -62,6 +74,7 @@ interface CetvelRow {
   ayGunSayisi: number;
   ucretManual: boolean;
   odenenUcret: number;
+  netVerisiYok?: boolean;
 }
 
 const formatDateTR = (dateStr: string): string => {
@@ -81,6 +94,27 @@ const formatDateTR = (dateStr: string): string => {
 function getAsgariUcretForPeriod(startISO: string): number {
   const v = getAsgariUcretByDate(startISO);
   return v ?? asgariUcretler[asgariUcretler.length - 1].brut;
+}
+
+function cetvelRowsToApiRows(rows: CetvelRow[]): { start: string; end: string; days: number }[] {
+  return rows
+    .map((r) => {
+      const start = r.startISO || (r as { start?: string }).start || "";
+      const end = r.endISO || (r as { end?: string }).end || "";
+      const days = r.gunSayisi ?? (r as { days?: number }).days ?? 0;
+      return { start, end, days };
+    })
+    .filter((r) => r.start && r.end && r.days > 0);
+}
+
+function applyNetCetvelFromCetvelRows(
+  prevNet: CetvelRow[],
+  brutRows: CetvelRow[],
+  netKatsayi: number
+): CetvelRow[] {
+  const apiRows = cetvelRowsToApiRows(brutRows);
+  if (apiRows.length === 0) return [];
+  return mergeNetCetvelWithApi(prevNet, apiRows, netKatsayi);
 }
 
 function cetvelSpanKey(startISO: string, endISO: string) {
@@ -123,6 +157,51 @@ function mergeCetvelWithApi(
   });
 }
 
+function mergeNetCetvelWithApi(
+  prev: CetvelRow[],
+  apiRows: { start: string; end: string; days: number }[],
+  globalKatsayiNow: number
+): CetvelRow[] {
+  const prevBySpan = new Map(prev.map((r) => [cetvelSpanKey(r.startISO, r.endISO), r]));
+  return apiRows.map((row, idx) => {
+    const startISO = row.start;
+    const endISO = row.end;
+    const existing = prevBySpan.get(cetvelSpanKey(startISO, endISO));
+    const ayGunSayisi = getDaysInMonth(new Date(row.start));
+    if (existing) {
+      return {
+        ...existing,
+        rangeLabel: `${formatDateTR(startISO)} – ${formatDateTR(endISO)}`,
+        startISO,
+        endISO,
+        gunSayisi: row.days,
+        ayGunSayisi,
+      };
+    }
+    const netVal = getAsgariNetUcretForPeriod(startISO);
+    return {
+      id: `net-row-${idx}-${startISO}`,
+      rangeLabel: `${formatDateTR(startISO)} – ${formatDateTR(endISO)}`,
+      startISO,
+      endISO,
+      katsayi: globalKatsayiNow,
+      ucret: netVal ?? 0,
+      gunSayisi: row.days,
+      ayGunSayisi,
+      ucretManual: false,
+      odenenUcret: 0,
+      netVerisiYok: netVal == null,
+    };
+  });
+}
+
+const tabBtnCls = (active: boolean) =>
+  `px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+    active
+      ? "bg-blue-600 text-white shadow-sm"
+      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+  }`;
+
 export default function UcretAlacagiPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id?: string }>();
@@ -143,12 +222,22 @@ export default function UcretAlacagiPage() {
   const [hasCustomKatsayi, setHasCustomKatsayi] = useState(false);
   const [grossForNet, setGrossForNet] = useState("");
   const [netForGross, setNetForGross] = useState("");
+  const [netTabGrossForNet, setNetTabGrossForNet] = useState("");
   const [currentRecordName, setCurrentRecordName] = useState<string | null>(null);
   const [manualWageFromTemplateActive, setManualWageFromTemplateActive] = useState(false);
+  const [activeTab, setActiveTab] = useState<HesaplamaTab>("brut");
+  const [netCetvelRows, setNetCetvelRows] = useState<CetvelRow[]>([]);
+  const [showNetCetvel, setShowNetCetvel] = useState(false);
+  const [netGlobalKatsayi, setNetGlobalKatsayi] = useState(1);
+  const [netHasCustomKatsayi, setNetHasCustomKatsayi] = useState(false);
+  const [katsayiModalTarget, setKatsayiModalTarget] = useState<HesaplamaTab>("brut");
   const loadRanRef = useRef(false);
   const calcRequestIdRef = useRef(0);
+  const netCalcRequestIdRef = useRef(0);
   const globalKatsayiRef = useRef(globalKatsayi);
+  const netGlobalKatsayiRef = useRef(netGlobalKatsayi);
   const cetvelRowsRef = useRef<CetvelRow[]>([]);
+  const netCetvelRowsRef = useRef<CetvelRow[]>([]);
 
   useEffect(() => {
     globalKatsayiRef.current = globalKatsayi;
@@ -157,6 +246,14 @@ export default function UcretAlacagiPage() {
   useEffect(() => {
     cetvelRowsRef.current = cetvelRows;
   }, [cetvelRows]);
+
+  useEffect(() => {
+    netGlobalKatsayiRef.current = netGlobalKatsayi;
+  }, [netGlobalKatsayi]);
+
+  useEffect(() => {
+    netCetvelRowsRef.current = netCetvelRows;
+  }, [netCetvelRows]);
 
   const selectedYear = useMemo(() => {
     if (endDate && endDate.trim() !== "") {
@@ -176,22 +273,8 @@ export default function UcretAlacagiPage() {
     return result;
   }, [startDate, endDate]);
 
-  const netFromGross = useMemo(() => {
-    if (!cetvelRows.length) {
-      return {
-        gross: 0,
-        sgk: 0,
-        issizlik: 0,
-        gelirVergisi: 0,
-        gelirVergisiBrut: 0,
-        gelirVergisiIstisna: 0,
-        gelirVergisiDilimleri: "",
-        damgaVergisi: 0,
-        damgaVergisiBrut: 0,
-        damgaVergisiIstisna: 0,
-        net: 0,
-      };
-    }
+  const netFromGross = useMemo((): ConversionPanelData => {
+    if (!cetvelRows.length) return EMPTY_CONVERSION_PANEL;
     const d = calculateSegmentedNetFromRows(cetvelRows);
     return {
       gross: d.totalGross,
@@ -208,49 +291,67 @@ export default function UcretAlacagiPage() {
     };
   }, [cetvelRows]);
 
-  const [grossFromNet, setGrossFromNet] = useState({
-    net: 0,
-    gross: 0,
-    sgk: 0,
-    issizlik: 0,
-    gelirVergisi: 0,
-    gelirVergisiBrut: 0,
-    gelirVergisiIstisna: 0,
-    gelirVergisiDilimleri: "",
-    damgaVergisi: 0,
-    damgaVergisiBrut: 0,
-    damgaVergisiIstisna: 0,
-  });
+  const netTabGrossFromCetvel = useMemo((): ConversionPanelData => {
+    const eligible = netCetvelRows.filter((row) => row.ucret > 0 && (!row.netVerisiYok || row.ucretManual));
+    if (!eligible.length) return EMPTY_CONVERSION_PANEL;
+    const d = calculateSegmentedGrossFromNetRows(eligible);
+    return {
+      gross: d.totalGross,
+      sgk: d.totalSgk,
+      issizlik: d.totalIssizlik,
+      gelirVergisi: d.totalGelirVergisi,
+      gelirVergisiBrut: d.totalGelirVergisiBrut,
+      gelirVergisiIstisna: d.totalGelirVergisiIstisna,
+      gelirVergisiDilimleri: "",
+      damgaVergisi: d.totalDamgaVergisi,
+      damgaVergisiBrut: d.totalDamgaVergisiBrut,
+      damgaVergisiIstisna: d.totalDamgaVergisiIstisna,
+      net: d.totalNet,
+    };
+  }, [netCetvelRows]);
+
+  const [grossFromNet, setGrossFromNet] = useState<ConversionPanelData>(EMPTY_CONVERSION_PANEL);
   const netVal = useMemo(() => parseNum(netForGross), [netForGross]);
+  const netTabGrossVal = useMemo(() => parseNum(netTabGrossForNet), [netTabGrossForNet]);
+
+  const netTabNetFromGrossManual = useMemo((): ConversionPanelData => {
+    if (netTabGrossVal <= 0) return EMPTY_CONVERSION_PANEL;
+    const d = computeNetFromGrossSingle(netTabGrossVal, selectedYear);
+    return {
+      gross: d.totalGross,
+      sgk: d.totalSgk,
+      issizlik: d.totalIssizlik,
+      gelirVergisi: d.totalGelirVergisi,
+      gelirVergisiBrut: d.totalGelirVergisiBrut,
+      gelirVergisiIstisna: d.totalGelirVergisiIstisna,
+      gelirVergisiDilimleri: "",
+      damgaVergisi: d.totalDamgaVergisi,
+      damgaVergisiBrut: d.totalDamgaVergisiBrut,
+      damgaVergisiIstisna: d.totalDamgaVergisiIstisna,
+      net: d.totalNet,
+    };
+  }, [netTabGrossVal, selectedYear]);
+
+  const fetchGrossFromNet = useCallback((net: number, year: number, onResult: (data: ConversionPanelData) => void) => {
+    if (net <= 0) {
+      onResult(EMPTY_CONVERSION_PANEL);
+      return;
+    }
+    apiClient(`/api/ucret-alacagi/gross-from-net`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ net, year }),
+    })
+      .then((res) => res.json())
+      .then((result) => {
+        if (result.success && result.data) onResult(result.data as ConversionPanelData);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
-    if (netVal > 0) {
-      apiClient(`/api/ucret-alacagi/gross-from-net`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ net: netVal, year: selectedYear }),
-      })
-        .then((res) => res.json())
-        .then((result) => {
-          if (result.success && result.data) setGrossFromNet(result.data);
-        })
-        .catch(() => {});
-    } else {
-      setGrossFromNet({
-        net: 0,
-        gross: 0,
-        sgk: 0,
-        issizlik: 0,
-        gelirVergisi: 0,
-        gelirVergisiBrut: 0,
-        gelirVergisiIstisna: 0,
-        gelirVergisiDilimleri: "",
-        damgaVergisi: 0,
-        damgaVergisiBrut: 0,
-        damgaVergisiIstisna: 0,
-      });
-    }
-  }, [netVal, selectedYear]);
+    fetchGrossFromNet(netVal, selectedYear, setGrossFromNet);
+  }, [netVal, selectedYear, fetchGrossFromNet]);
 
   const totalBrut = useMemo(() => {
     const brutToplam = cetvelRows.reduce((acc, row) => {
@@ -262,18 +363,32 @@ export default function UcretAlacagiPage() {
     return Math.max(0, brutToplam - odenenToplam);
   }, [cetvelRows]);
 
+  const totalNet = useMemo(() => calcCetvelGrandTotal(netCetvelRows), [netCetvelRows]);
+
   const applyGlobalCoefficient = useCallback((katsayi: number) => {
     if (!Number.isFinite(katsayi) || katsayi <= 0) return;
+    if (katsayiModalTarget === "net") {
+      setNetGlobalKatsayi(katsayi);
+      setNetHasCustomKatsayi(true);
+      setNetCetvelRows((prev) => prev.map((row) => ({ ...row, katsayi })));
+      return;
+    }
     setGlobalKatsayi(katsayi);
     setHasCustomKatsayi(true);
     setCetvelRows((prev) => prev.map((row) => ({ ...row, katsayi })));
-  }, []);
+  }, [katsayiModalTarget]);
 
   const removeGlobalCoefficient = useCallback(() => {
+    if (activeTab === "net") {
+      setNetGlobalKatsayi(1);
+      setNetHasCustomKatsayi(false);
+      setNetCetvelRows((prev) => prev.map((row) => ({ ...row, katsayi: 1 })));
+      return;
+    }
     setGlobalKatsayi(1);
     setHasCustomKatsayi(false);
     setCetvelRows((prev) => prev.map((row) => ({ ...row, katsayi: 1 })));
-  }, []);
+  }, [activeTab]);
 
   const handleApplyManualBruts = useCallback((brutById: Record<string, number>) => {
     setCetvelRows((prev) =>
@@ -308,6 +423,8 @@ export default function UcretAlacagiPage() {
       setCetvelRows([]);
       setManualWageFromTemplateActive(false);
       setShowCetvel(false);
+      setNetCetvelRows([]);
+      setShowNetCetvel(false);
       return;
     }
 
@@ -326,6 +443,8 @@ export default function UcretAlacagiPage() {
         setCetvelRows([]);
         setManualWageFromTemplateActive(false);
         setShowCetvel(false);
+        setNetCetvelRows([]);
+        setShowNetCetvel(false);
         return;
       }
 
@@ -344,6 +463,8 @@ export default function UcretAlacagiPage() {
         setCetvelRows([]);
         setManualWageFromTemplateActive(false);
         setShowCetvel(false);
+        setNetCetvelRows([]);
+        setShowNetCetvel(false);
         return;
       }
 
@@ -355,12 +476,17 @@ export default function UcretAlacagiPage() {
         setCetvelRows(merged);
         setManualWageFromTemplateActive((was) => was && merged.some((r) => r.ucretManual));
         setShowCetvel(true);
+        const netMerged = mergeNetCetvelWithApi(netCetvelRowsRef.current, apiRows, netGlobalKatsayiRef.current);
+        setNetCetvelRows(netMerged);
+        setShowNetCetvel(true);
       } else {
         if (currentRequestId !== calcRequestIdRef.current) return;
         if (result.error) showToastError(result.error);
         setCetvelRows([]);
         setManualWageFromTemplateActive(false);
         setShowCetvel(false);
+        setNetCetvelRows([]);
+        setShowNetCetvel(false);
       }
     } catch {
       if (currentRequestId !== calcRequestIdRef.current) return;
@@ -368,8 +494,60 @@ export default function UcretAlacagiPage() {
       setCetvelRows([]);
       setManualWageFromTemplateActive(false);
       setShowCetvel(false);
+      setNetCetvelRows([]);
+      setShowNetCetvel(false);
     }
   }, [startDate, endDate, showToastError]);
+
+  const generateNetCetvel = useCallback(async () => {
+    netCalcRequestIdRef.current += 1;
+    const currentRequestId = netCalcRequestIdRef.current;
+
+    if (!startDate || !endDate) {
+      if (currentRequestId !== netCalcRequestIdRef.current) return;
+      setNetCetvelRows([]);
+      setShowNetCetvel(false);
+      return;
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return;
+
+    try {
+      const avgUcret = getAsgariUcretForPeriod(startDate);
+      const monthly = Number(avgUcret) || getAsgariUcretForPeriod(endDate);
+      if (!monthly || monthly <= 0) {
+        if (currentRequestId !== netCalcRequestIdRef.current) return;
+        setNetCetvelRows([]);
+        setShowNetCetvel(false);
+        return;
+      }
+
+      const response = await apiClient(`/api/ucret-alacagi/calculate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startDate, endDate, monthly }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success || !result.data?.rows) {
+        if (currentRequestId !== netCalcRequestIdRef.current) return;
+        setNetCetvelRows([]);
+        setShowNetCetvel(false);
+        return;
+      }
+
+      const apiRows = result.data.rows as { start: string; end: string; days: number }[];
+      if (currentRequestId !== netCalcRequestIdRef.current) return;
+      const merged = mergeNetCetvelWithApi(netCetvelRowsRef.current, apiRows, netGlobalKatsayiRef.current);
+      setNetCetvelRows(merged);
+      setShowNetCetvel(true);
+    } catch {
+      if (currentRequestId !== netCalcRequestIdRef.current) return;
+      setNetCetvelRows([]);
+      setShowNetCetvel(false);
+    }
+  }, [startDate, endDate]);
 
   useEffect(() => {
     if (loadRanRef.current) return;
@@ -385,6 +563,36 @@ export default function UcretAlacagiPage() {
 
     return () => clearTimeout(timer);
   }, [startDate, endDate, generateCetvel]);
+
+  /** Brüt cetvel oluşunca net cetveli aynı dönem yapısından üret. */
+  useEffect(() => {
+    if (!startDate || !endDate) return;
+    if (showNetCetvel && netCetvelRows.length > 0) return;
+    if (cetvelRows.length === 0) return;
+
+    const merged = applyNetCetvelFromCetvelRows(
+      netCetvelRowsRef.current,
+      cetvelRows,
+      netGlobalKatsayiRef.current
+    );
+    if (merged.length === 0) return;
+    setNetCetvelRows(merged);
+    setShowNetCetvel(true);
+  }, [startDate, endDate, cetvelRows, showNetCetvel, netCetvelRows.length]);
+
+  /** Brüt cetvel yoksa net sekmesinde API ile üret. */
+  useEffect(() => {
+    if (activeTab !== "net") return;
+    if (!startDate || !endDate) return;
+    if (showNetCetvel && netCetvelRows.length > 0) return;
+    if (cetvelRows.length > 0) return;
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return;
+
+    void generateNetCetvel();
+  }, [activeTab, startDate, endDate, showNetCetvel, netCetvelRows.length, cetvelRows.length, generateNetCetvel]);
 
   useEffect(() => {
     loadRanRef.current = false;
@@ -405,6 +613,27 @@ export default function UcretAlacagiPage() {
     const cleanValue = newValue.replace(/₺/g, "").replace(/\s/g, "").trim();
     const numValue = parseFloat(cleanValue.replace(/\./g, "").replace(",", ".")) || 0;
     setCetvelRows((prev) => prev.map((row) => (row.id === rowId ? { ...row, odenenUcret: numValue } : row)));
+  }, []);
+
+  const handleNetUcretBlur = useCallback((rowId: string, newValue: string) => {
+    const cleanValue = newValue.replace(/₺/g, "").replace(/\s/g, "").trim();
+    const numValue = parseFloat(cleanValue.replace(/\./g, "").replace(",", ".")) || 0;
+    setNetCetvelRows((prev) =>
+      prev.map((row) =>
+        row.id === rowId ? { ...row, ucret: numValue, ucretManual: true, netVerisiYok: false } : row
+      )
+    );
+  }, []);
+
+  const handleNetKatsayiBlur = useCallback((rowId: string, newValue: string) => {
+    const numValue = parseFloat(newValue.replace(",", ".")) || 1;
+    setNetCetvelRows((prev) => prev.map((row) => (row.id === rowId ? { ...row, katsayi: numValue } : row)));
+  }, []);
+
+  const handleNetOdenenUcretBlur = useCallback((rowId: string, newValue: string) => {
+    const cleanValue = newValue.replace(/₺/g, "").replace(/\s/g, "").trim();
+    const numValue = parseFloat(cleanValue.replace(/\./g, "").replace(",", ".")) || 0;
+    setNetCetvelRows((prev) => prev.map((row) => (row.id === rowId ? { ...row, odenenUcret: numValue } : row)));
   }, []);
 
   useEffect(() => {
@@ -462,11 +691,32 @@ export default function UcretAlacagiPage() {
           const mappedRows = rowsSource.map((r: Record<string, unknown>) => {
             const odenenRaw = r.odenenUcret ?? r.odenen_ucret ?? r.OdenenUcret ?? 0;
             const odenen = Number(odenenRaw) || 0;
-            return { ...r, odenenUcret: odenen };
+            const startISO = String(r.startISO ?? r.start ?? "");
+            const endISO = String(r.endISO ?? r.end ?? "");
+            const gunSayisi = Number(r.gunSayisi ?? r.days ?? 0) || 0;
+            const ayGunSayisi = Number(r.ayGunSayisi ?? r.ay_gun_sayisi ?? 0) || getDaysInMonth(new Date(startISO || Date.now()));
+            return {
+              ...r,
+              id: String(r.id ?? `row-${startISO}`),
+              rangeLabel: String(r.rangeLabel ?? `${formatDateTR(startISO)} – ${formatDateTR(endISO)}`),
+              startISO,
+              endISO,
+              katsayi: Number(r.katsayi ?? 1) || 1,
+              ucret: Number(r.ucret ?? 0) || 0,
+              gunSayisi,
+              ayGunSayisi,
+              ucretManual: Boolean(r.ucretManual),
+              odenenUcret: odenen,
+            };
           }) as CetvelRow[];
           setCetvelRows(mappedRows);
           setManualWageFromTemplateActive(false);
           setShowCetvel(true);
+          const netMerged = applyNetCetvelFromCetvelRows([], mappedRows, netGlobalKatsayiRef.current);
+          if (netMerged.length > 0) {
+            setNetCetvelRows(netMerged);
+            setShowNetCetvel(true);
+          }
         }
 
         setCurrentRecordName(
@@ -707,29 +957,25 @@ export default function UcretAlacagiPage() {
 
   const handleNewCalculation = () => {
     try {
-      const hasUnsavedChanges = Boolean(startDate || endDate || cetvelRows.length > 0);
+      const hasUnsavedChanges = Boolean(
+        startDate || endDate || cetvelRows.length > 0 || netCetvelRows.length > 0
+      );
       if (hasUnsavedChanges && !window.confirm("Kaydedilmemiş veriler silinecek. Devam etmek istiyor musunuz?")) return;
       setStartDate("");
       setEndDate("");
       setCetvelRows([]);
+      setNetCetvelRows([]);
       setManualWageFromTemplateActive(false);
       setShowCetvel(false);
+      setShowNetCetvel(false);
       setGlobalKatsayi(1);
       setHasCustomKatsayi(false);
+      setNetGlobalKatsayi(1);
+      setNetHasCustomKatsayi(false);
+      setActiveTab("brut");
       setNetForGross("");
-      setGrossFromNet({
-        net: 0,
-        gross: 0,
-        sgk: 0,
-        issizlik: 0,
-        gelirVergisi: 0,
-        gelirVergisiBrut: 0,
-        gelirVergisiIstisna: 0,
-        gelirVergisiDilimleri: "",
-        damgaVergisi: 0,
-        damgaVergisiBrut: 0,
-        damgaVergisiIstisna: 0,
-      });
+      setNetTabGrossForNet("");
+      setGrossFromNet(EMPTY_CONVERSION_PANEL);
       setCurrentRecordName(null);
       loadRanRef.current = false;
       if (effectiveId) navigate(REDIRECT_PATH);
@@ -810,17 +1056,37 @@ export default function UcretAlacagiPage() {
                       </p>
                     </div>
                   ) : null}
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setShowKatsayiModal(true)}>
-                      Kat Sayı Hesapla
-                    </Button>
-                    {hasCustomKatsayi ? (
-                      <Button type="button" variant="outline" size="sm" onClick={removeGlobalCoefficient}>
-                        Kat Sayı Kaldır ({globalKatsayi.toFixed(4)})
-                      </Button>
-                    ) : null}
-                  </div>
                 </div>
+
+                <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-600 pb-2">
+                  <button type="button" className={tabBtnCls(activeTab === "brut")} onClick={() => setActiveTab("brut")}>
+                    Brütten Hesaplama
+                  </button>
+                  <button type="button" className={tabBtnCls(activeTab === "net")} onClick={() => setActiveTab("net")}>
+                    Netten Hesaplama
+                  </button>
+                </div>
+
+                {activeTab === "brut" ? (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setKatsayiModalTarget("brut");
+                          setShowKatsayiModal(true);
+                        }}
+                      >
+                        Kat Sayı Hesapla
+                      </Button>
+                      {hasCustomKatsayi ? (
+                        <Button type="button" variant="outline" size="sm" onClick={removeGlobalCoefficient}>
+                          Kat Sayı Kaldır ({globalKatsayi.toFixed(4)})
+                        </Button>
+                      ) : null}
+                    </div>
 
                 {showCetvel && cetvelRows.length > 0 ? (
                   <div className="rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden">
@@ -932,170 +1198,170 @@ export default function UcretAlacagiPage() {
                     Ücret hesaplaması için tarihleri girin. Tablo otomatik oluşturulacaktır.
                   </div>
                 )}
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Card className="border-border">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">{FORM_LABELS.GROSS_TO_NET}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-xs">
-                    <div>
-                      <Label className="text-xs">{FORM_LABELS.GROSS_SALARY}</Label>
-                      <div className="h-8 text-sm flex items-center text-gray-600 dark:text-gray-400">
-                        {cetvelRows.length > 0 ? `Cetvelden: ${fmtCurrency(totalBrut)}₺` : "Cetvel oluşturun"}
-                      </div>
+              <UcretConversionCards
+                layout="brut"
+                labels={FORM_LABELS}
+                fmtCurrency={fmtCurrency}
+                cetvelSourceText={
+                  cetvelRows.length > 0 ? `Cetvelden: ${fmtCurrency(totalBrut)}₺` : "Cetvel oluşturun"
+                }
+                netFromGross={netFromGross}
+                grossFromNet={grossFromNet}
+                manualInput={netForGross}
+                onManualInputChange={setNetForGross}
+                onUseLeftPanelValue={() => setNetForGross(fmtCurrency(netFromGross.net))}
+                leftPanelResultValue={netFromGross.net}
+                useLeftPanelLabel="Sol panelin netini kullan"
+              />
+                  </>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setKatsayiModalTarget("net");
+                          setShowKatsayiModal(true);
+                        }}
+                      >
+                        Kat Sayı Hesapla
+                      </Button>
+                      {netHasCustomKatsayi ? (
+                        <Button type="button" variant="outline" size="sm" onClick={removeGlobalCoefficient}>
+                          Kat Sayı Kaldır ({netGlobalKatsayi.toFixed(4)})
+                        </Button>
+                      ) : null}
                     </div>
-                    <div className="space-y-1 pt-2 border-t border-gray-200 dark:border-gray-600">
-                      <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                        <span className="text-gray-600 dark:text-gray-400">Brüt Ücret</span>
-                        <span className="font-semibold">{fmtCurrency(netFromGross.gross)}₺</span>
-                      </div>
-                      <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                        <span className="text-red-600">SGK Primi (%14)</span>
-                        <span className="font-semibold text-red-600">-{fmtCurrency(netFromGross.sgk)}₺</span>
-                      </div>
-                      <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                        <span className="text-red-600">İşsizlik Primi (%1)</span>
-                        <span className="font-semibold text-red-600">-{fmtCurrency(netFromGross.issizlik)}₺</span>
-                      </div>
-                      {netFromGross.gelirVergisiIstisna > 0 ? (
-                        <>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-red-600">Gelir Vergisi (Brüt)</span>
-                            <span className="font-semibold text-red-600">-{fmtCurrency(netFromGross.gelirVergisiBrut)}₺</span>
-                          </div>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-green-600">Asg. Üc. Gel. Vergi İst.</span>
-                            <span className="font-semibold text-green-600">+{fmtCurrency(netFromGross.gelirVergisiIstisna)}₺</span>
-                          </div>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-gray-600">Net Gelir Vergisi</span>
-                            <span className="font-semibold">-{fmtCurrency(netFromGross.gelirVergisi)}₺</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                          <span className="text-red-600">Gelir Vergisi {netFromGross.gelirVergisiDilimleri}</span>
-                          <span className="font-semibold text-red-600">-{fmtCurrency(netFromGross.gelirVergisi)}₺</span>
-                        </div>
-                      )}
-                      {netFromGross.damgaVergisiIstisna > 0 ? (
-                        <>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-red-600">Damga Vergisi (Brüt)</span>
-                            <span className="font-semibold text-red-600">-{fmtCurrency(netFromGross.damgaVergisiBrut)}₺</span>
-                          </div>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-green-600">Asg. Üc. Damga Vergi İst.</span>
-                            <span className="font-semibold text-green-600">+{fmtCurrency(netFromGross.damgaVergisiIstisna)}₺</span>
-                          </div>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-gray-600">Net Damga Vergisi</span>
-                            <span className="font-semibold">-{fmtCurrency(netFromGross.damgaVergisi)}₺</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                          <span className="text-red-600">Damga Vergisi (binde 7,59)</span>
-                          <span className="font-semibold text-red-600">-{fmtCurrency(netFromGross.damgaVergisi)}₺</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between pt-2">
-                        <span className="text-sm font-semibold text-green-700 dark:text-green-400">Net Ücret</span>
-                        <span className="text-sm font-bold text-green-700 dark:text-green-400">{fmtCurrency(netFromGross.net)}₺</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
 
-                <Card className="border-border">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">{FORM_LABELS.NET_TO_GROSS}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-xs">
-                    <div>
-                      <Label className="text-xs">{FORM_LABELS.NET_SALARY}</Label>
-                      <div className="flex gap-2 mt-1">
-                        <Input
-                          value={netForGross}
-                          onChange={(e) => setNetForGross(e.target.value)}
-                          placeholder="Örn: 18.000,00"
-                          className="h-8 text-sm flex-1"
-                        />
-                        {netFromGross.net > 0 ? (
-                          <button
-                            type="button"
-                            onClick={() => setNetForGross(fmtCurrency(netFromGross.net))}
-                            className="shrink-0 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 rounded border border-emerald-200 dark:border-emerald-700 h-8"
-                          >
-                            Sol panelin netini kullan
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="space-y-1 pt-2 border-t border-gray-200 dark:border-gray-600">
-                      <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                        <span className="text-gray-600 dark:text-gray-400">Net Ücret</span>
-                        <span className="font-semibold">{fmtCurrency(grossFromNet.net)}₺</span>
-                      </div>
-                      <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                        <span className="text-red-600">SGK Primi (%14)</span>
-                        <span className="font-semibold text-red-600">+{fmtCurrency(grossFromNet.sgk)}₺</span>
-                      </div>
-                      <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                        <span className="text-red-600">İşsizlik Primi (%1)</span>
-                        <span className="font-semibold text-red-600">+{fmtCurrency(grossFromNet.issizlik)}₺</span>
-                      </div>
-                      {(grossFromNet.gelirVergisiIstisna ?? 0) > 0 ? (
-                        <>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-red-600">Gelir Vergisi (Brüt)</span>
-                            <span className="font-semibold text-red-600">+{fmtCurrency(grossFromNet.gelirVergisiBrut ?? 0)}₺</span>
-                          </div>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-green-600">Asg. Üc. Gel. Vergi İst.</span>
-                            <span className="font-semibold text-green-600">-{fmtCurrency(grossFromNet.gelirVergisiIstisna ?? 0)}₺</span>
-                          </div>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-gray-600">Net Gelir Vergisi</span>
-                            <span className="font-semibold">+{fmtCurrency(grossFromNet.gelirVergisi)}₺</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                          <span className="text-red-600">Gelir Vergisi {grossFromNet.gelirVergisiDilimleri}</span>
-                          <span className="font-semibold text-red-600">+{fmtCurrency(grossFromNet.gelirVergisi)}₺</span>
+                    {showNetCetvel && netCetvelRows.length > 0 ? (
+                      <div className="rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden">
+                        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-gray-800 dark:to-gray-800 px-3 py-2 border-b border-gray-200 dark:border-gray-600">
+                          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Net Ücret Hesaplama Cetveli</h3>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Dönem bazlı net ücret hesaplaması</p>
                         </div>
-                      )}
-                      {(grossFromNet.damgaVergisiIstisna ?? 0) > 0 ? (
-                        <>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-red-600">Damga Vergisi (Brüt)</span>
-                            <span className="font-semibold text-red-600">+{fmtCurrency(grossFromNet.damgaVergisiBrut ?? 0)}₺</span>
-                          </div>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-green-600">Asg. Üc. Damga Vergi İst.</span>
-                            <span className="font-semibold text-green-600">-{fmtCurrency(grossFromNet.damgaVergisiIstisna ?? 0)}₺</span>
-                          </div>
-                          <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                            <span className="text-gray-600">Net Damga Vergisi</span>
-                            <span className="font-semibold">+{fmtCurrency(grossFromNet.damgaVergisi)}₺</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex justify-between py-0.5 border-b border-gray-100 dark:border-gray-700">
-                          <span className="text-red-600">Damga Vergisi (binde 7,59)</span>
-                          <span className="font-semibold text-red-600">+{fmtCurrency(grossFromNet.damgaVergisi)}₺</span>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-gray-50 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-600">
+                                <th className="text-left px-2 py-2 font-semibold text-gray-700 dark:text-gray-300">Tarih Aralığı</th>
+                                <th className="text-center px-2 py-2 font-semibold text-gray-700 dark:text-gray-300">Gün</th>
+                                <th className="text-right px-2 py-2 font-semibold text-gray-700 dark:text-gray-300">Katsayı</th>
+                                <th className="text-right px-2 py-2 font-semibold text-gray-700 dark:text-gray-300">Net Ücret (₺)</th>
+                                <th className="text-right px-2 py-2 font-semibold text-gray-700 dark:text-gray-300">Ödenen</th>
+                                <th className="text-right px-2 py-2 font-semibold text-gray-700 dark:text-gray-300">Toplam (₺)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {netCetvelRows.map((row, idx) => {
+                                const rowTotal = calcRowUcretTotal(row);
+                                return (
+                                  <tr
+                                    key={row.id}
+                                    className={`border-b border-gray-100 dark:border-gray-700 ${
+                                      idx % 2 === 0 ? "bg-white dark:bg-gray-900" : "bg-gray-50/50 dark:bg-gray-800/80"
+                                    }`}
+                                  >
+                                    <td className="px-2 py-2 text-gray-800 dark:text-gray-200 font-medium">{row.rangeLabel}</td>
+                                    <td className="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{row.gunSayisi}</td>
+                                    <td className="px-2 py-2 text-right">
+                                      <input
+                                        type="text"
+                                        key={`net-katsayi-${row.id}-${row.katsayi}`}
+                                        data-net-katsayi-row={row.id}
+                                        defaultValue={row.katsayi.toFixed(4).replace(".", ",")}
+                                        onBlur={(e) => handleNetKatsayiBlur(row.id, e.target.value)}
+                                        className="w-20 text-right border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 text-xs bg-white dark:bg-gray-800"
+                                      />
+                                    </td>
+                                    <td className="px-2 py-2 text-right">
+                                      <input
+                                        type="text"
+                                        key={`net-ucret-${row.id}-${row.ucret}-${row.netVerisiYok}`}
+                                        data-net-ucret-row={row.id}
+                                        defaultValue={
+                                          row.netVerisiYok && !row.ucretManual
+                                            ? ""
+                                            : row.ucret
+                                              ? `${fmtCurrency(row.ucret)}₺`
+                                              : ""
+                                        }
+                                        placeholder={
+                                          row.netVerisiYok && !row.ucretManual ? "Net verisi yok" : "0,00"
+                                        }
+                                        onBlur={(e) => handleNetUcretBlur(row.id, e.target.value)}
+                                        className={`w-24 text-right border rounded px-1 py-0.5 text-xs ${
+                                          row.netVerisiYok && !row.ucretManual
+                                            ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30 placeholder:text-amber-600 dark:placeholder:text-amber-400"
+                                            : row.ucretManual
+                                              ? "border-orange-400 bg-orange-50 dark:bg-orange-950/30"
+                                              : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                                        }`}
+                                      />
+                                    </td>
+                                    <td className="px-2 py-2 text-right">
+                                      <input
+                                        type="text"
+                                        key={`net-odenen-${row.id}`}
+                                        data-net-odenen-row={row.id}
+                                        defaultValue={row.odenenUcret ? fmtCurrency(row.odenenUcret) : ""}
+                                        placeholder="0"
+                                        onBlur={(e) => handleNetOdenenUcretBlur(row.id, e.target.value)}
+                                        className="w-20 text-right border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 text-xs bg-white dark:bg-gray-800"
+                                      />
+                                    </td>
+                                    <td className="px-2 py-2 text-right font-semibold text-gray-800 dark:text-gray-200">
+                                      {fmtCurrency(rowTotal)}₺
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
+                                <td colSpan={5} className="px-2 py-2 text-right font-bold text-base">
+                                  {NET_CETVEL_FOOTER}
+                                </td>
+                                <td className="px-2 py-2 text-right font-bold">{fmtCurrency(totalNet)}₺</td>
+                              </tr>
+                            </tfoot>
+                          </table>
                         </div>
-                      )}
-                      <div className="flex justify-between pt-2">
-                        <span className="text-sm font-semibold text-green-700 dark:text-green-400">Brüt Ücret</span>
-                        <span className="text-sm font-bold text-green-700 dark:text-green-400">{fmtCurrency(grossFromNet.gross)}₺</span>
+                        <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/20 border-t border-amber-100 dark:border-amber-900 space-y-1">
+                          <p className="text-[11px] text-amber-800 dark:text-amber-200">
+                            <strong>Not:</strong> Net ücret sütunu dönemsel resmi net asgari ücret tablosundan okunur (2015 ve sonrası). Veri bulunmayan dönemlerde hücre boş kalır; değerleri manuel girebilirsiniz.
+                          </p>
+                          <p className="text-[11px] text-amber-800 dark:text-amber-200">
+                            Netten Brüte çevirme kısmında hesaplamalar yukarıda yer alan aylık net ücretler tek tek hesaplanarak toplam veri tabloda yer almaktadır.
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 p-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Net ücret hesaplaması için tarihleri girin. Tablo otomatik oluşturulacaktır.
+                      </div>
+                    )}
+
+                    <UcretConversionCards
+                      layout="net"
+                      labels={FORM_LABELS}
+                      fmtCurrency={fmtCurrency}
+                      cetvelSourceText={
+                        netCetvelRows.length > 0 ? `Cetvelden: ${fmtCurrency(totalNet)}₺` : "Cetvel oluşturun"
+                      }
+                      netFromGross={netTabNetFromGrossManual}
+                      grossFromNet={netTabGrossFromCetvel}
+                      manualInput={netTabGrossForNet}
+                      onManualInputChange={setNetTabGrossForNet}
+                      onUseLeftPanelValue={() => setNetTabGrossForNet(fmtCurrency(netTabGrossFromCetvel.gross))}
+                      leftPanelResultValue={netTabGrossFromCetvel.gross}
+                      useLeftPanelLabel="Sol panelin brütünü kullan"
+                    />
+
+                  </>
+                )}
               </div>
 
               <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">

@@ -189,6 +189,75 @@ export function calculateSegmentedNetFromRows(rows: CetvelRowForNet[]): Segmente
   };
 }
 
+/** Net cetvel satırlarından dönem bazlı netten brüte toplam (Brütten Nete'nin tersi). */
+export function calculateSegmentedGrossFromNetRows(rows: CetvelRowForNet[]): SegmentedNetResult {
+  const z = (v: number) => round2(v);
+  let totalGross = 0;
+  let totalSgk = 0;
+  let totalIssizlik = 0;
+  let totalGelirVergisiBrut = 0;
+  let totalGelirVergisiIstisna = 0;
+  let totalGelirVergisi = 0;
+  let totalDamgaVergisiBrut = 0;
+  let totalDamgaVergisiIstisna = 0;
+  let totalDamgaVergisi = 0;
+  let totalNet = 0;
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return {
+      totalGross: 0,
+      totalSgk: 0,
+      totalIssizlik: 0,
+      totalGelirVergisiBrut: 0,
+      totalGelirVergisiIstisna: 0,
+      totalGelirVergisi: 0,
+      totalDamgaVergisiBrut: 0,
+      totalDamgaVergisiIstisna: 0,
+      totalDamgaVergisi: 0,
+      totalNet: 0,
+    };
+  }
+
+  for (const row of rows) {
+    const gunSayisi = row.gunSayisi ?? 0;
+    const ayGunSayisi = row.ayGunSayisi ?? 30;
+    const isFullMonth = gunSayisi === ayGunSayisi;
+    const netAmount = isFullMonth
+      ? (row.ucret || 0) * (row.katsayi || 1)
+      : ((row.ucret || 0) / 30) * gunSayisi * (row.katsayi || 1);
+    const odenenUcret = row.odenenUcret || 0;
+    const netPeriod = Math.max(0, netAmount - odenenUcret);
+    if (netPeriod <= 0) continue;
+
+    const year = row.startISO || row.start ? new Date((row.startISO || row.start) as string).getFullYear() : new Date().getFullYear();
+    const result = computeGrossFromNetSingle(netPeriod, year);
+
+    totalNet += z(netPeriod);
+    totalGross += result.totalGross;
+    totalSgk += result.totalSgk;
+    totalIssizlik += result.totalIssizlik;
+    totalGelirVergisiBrut += result.totalGelirVergisiBrut;
+    totalGelirVergisiIstisna += result.totalGelirVergisiIstisna;
+    totalGelirVergisi += result.totalGelirVergisi;
+    totalDamgaVergisiBrut += result.totalDamgaVergisiBrut;
+    totalDamgaVergisiIstisna += result.totalDamgaVergisiIstisna;
+    totalDamgaVergisi += result.totalDamgaVergisi;
+  }
+
+  return {
+    totalGross: z(totalGross),
+    totalSgk: z(totalSgk),
+    totalIssizlik: z(totalIssizlik),
+    totalGelirVergisiBrut: z(totalGelirVergisiBrut),
+    totalGelirVergisiIstisna: z(totalGelirVergisiIstisna),
+    totalGelirVergisi: z(totalGelirVergisi),
+    totalDamgaVergisiBrut: z(totalDamgaVergisiBrut),
+    totalDamgaVergisiIstisna: z(totalDamgaVergisiIstisna),
+    totalDamgaVergisi: z(totalDamgaVergisi),
+    totalNet: z(totalNet),
+  };
+}
+
 /**
  * Yıl ve döneme göre startISO (asgari ücret seçimi için)
  */
