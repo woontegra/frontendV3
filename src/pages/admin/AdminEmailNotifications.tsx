@@ -16,6 +16,10 @@ import {
   USER_MAIL_AUTO_VARS_HINT,
   USER_MAIL_MANUAL_VARS_HINT,
 } from "@/pages/admin/sharedUserMailTemplates";
+import {
+  ACTIVE_SMMM_CHAMBERS,
+  collectSmmmRecipientEmails,
+} from "@/pages/admin/smmmChambersData";
 
 type BarAssociation = {
   id: number;
@@ -69,6 +73,10 @@ export default function AdminEmailNotifications() {
   const [barSelectionMode, setBarSelectionMode] = useState<"all" | "selected">("all");
   const [selectedBarIds, setSelectedBarIds] = useState<number[]>([]);
   const [includeSecondaryEmail, setIncludeSecondaryEmail] = useState(false);
+  const [smmmSearch, setSmmmSearch] = useState("");
+  const [smmmSelectionMode, setSmmmSelectionMode] = useState<"all" | "selected">("all");
+  const [selectedSmmmIds, setSelectedSmmmIds] = useState<string[]>([]);
+  const [includeSmmmSecondaryEmail, setIncludeSmmmSecondaryEmail] = useState(false);
   const [testEmail, setTestEmail] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
   const [trackingSummary, setTrackingSummary] = useState<any>(null);
@@ -127,6 +135,7 @@ export default function AdminEmailNotifications() {
     { value: "expired", label: "Süresi Dolmuş Kullanıcılar", icon: XCircle },
     { value: "custom", label: "Özel Email Listesi", icon: Mail },
     { value: "bar_associations", label: "Barolar", icon: Mail },
+    { value: "smmm_chambers", label: "SMMM Odaları", icon: Mail },
   ];
 
   const templates = [
@@ -166,6 +175,49 @@ Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
       recipientType: DEMO_OFFER_MAIL_TEMPLATE.recipientType,
       subject: DEMO_OFFER_MAIL_TEMPLATE.subject,
       message: DEMO_OFFER_MAIL_TEMPLATE.message,
+    },
+    {
+      name: "SMMM Odalarına Bilgilendirme",
+      description:
+        "SMMM odaları için işçilik alacağı ve tazminat hesaplama bilgilendirme maili",
+      templateId: "smmm_info",
+      recipientType: "smmm_chambers",
+      subject: "SMMM'ler için işçilik alacağı ve tazminat hesaplamalarında pratik çözüm",
+      message: `Merhaba {{firstName}},
+
+Mali müşavirlik süreçlerinde işçilik hesaplamaları çoğu zaman yalnızca bordro ile sınırlı kalmıyor.
+
+Kıdem tazminatı, ihbar tazminatı, fazla mesai, yıllık izin, hafta tatili ve UBGT gibi alacak kalemlerinde; dönemsel ücretler, çalışma tarihleri, net/brüt ayrımı ve yasal parametreler nedeniyle hesaplamalar kısa sürede karmaşık hale gelebiliyor.
+
+Bilirkişi Hesaplama Araçları, bu hesaplamaları daha hızlı, düzenli ve kontrol edilebilir şekilde yapabilmeniz için geliştirilmiş dijital bir hesaplama platformudur.
+
+Sistem üzerinden;
+
+- Kıdem tazminatı
+- İhbar tazminatı
+- Fazla mesai alacağı
+- Yıllık izin ücreti
+- Hafta tatili alacağı
+- Ulusal bayram ve genel tatil alacağı
+- Ücret alacağı
+
+gibi kalemleri ayrı ayrı hesaplayabilir, sonuçları daha düzenli şekilde değerlendirebilirsiniz.
+
+Özellikle mükelleflerinizden gelen “yaklaşık ne kadar tazminat çıkar?”, “işten ayrılan personel için ne ödenmeli?”, “fazla mesai hesabı nasıl çıkar?” gibi sorulara daha hızlı ve güvenilir yanıt verebilirsiniz.
+
+Size özel oluşturulan erişim bağlantısını aşağıda paylaşıyoruz:
+
+{{campaignLink}}
+
+Bu bağlantı üzerinden sistemi inceleyebilir, hesaplama ekranlarını deneyebilir ve iş akışınıza uygun olup olmadığını değerlendirebilirsiniz.
+
+Herhangi bir sorunuz olursa panel üzerinden destek talebi oluşturabilir veya bu e-postaya yanıt verebilirsiniz.
+
+Saygılarımızla,
+Bilirkişi Hesaplama Araçları
+
+Alt bilgi:
+Bu e-posta, Bilirkişi Hesaplama Araçları hakkında bilgilendirme amacıyla gönderilmiştir. Benzer bilgilendirmeleri almak istemiyorsanız {{unsubscribeUrl}} bağlantısı üzerinden abonelikten çıkabilirsiniz.`,
     },
   ];
 
@@ -244,6 +296,19 @@ Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
       error("Gönderim için aktif baro bulunamadı");
       return;
     }
+
+    if (formData.recipientType === "smmm_chambers" && ACTIVE_SMMM_CHAMBERS.length === 0) {
+      error("Gönderim için aktif SMMM odası bulunamadı");
+      return;
+    }
+    if (
+      formData.recipientType === "smmm_chambers" &&
+      smmmSelectionMode === "selected" &&
+      selectedSmmmIds.length === 0
+    ) {
+      error("En az bir SMMM odası seçin");
+      return;
+    }
     setIsPreviewOpen(true);
   };
 
@@ -261,10 +326,16 @@ Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
         includeSecondaryEmail,
         barSelectionMode,
         barAssociationIds: selectedBarIds,
+        smmmSelectionMode,
+        smmmChamberIds: selectedSmmmIds,
+        includeSmmmSecondaryEmail,
         ...(appliedTemplateId && { template: appliedTemplateId }),
         allowWithoutProtocol: Boolean(options?.allowWithoutProtocol),
       };
-      if (formData.recipientType === "bar_associations") {
+      if (
+        formData.recipientType === "bar_associations" ||
+        formData.recipientType === "smmm_chambers"
+      ) {
         requestBody.demoAccess = {
           username: formData.demoUsername,
           password: formData.demoPassword,
@@ -289,6 +360,9 @@ Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
 
       if (formData.recipientType === "bar_associations" && barSelectionMode === "selected") {
         requestBody.barAssociationIds = selectedBarIds;
+      }
+      if (formData.recipientType === "smmm_chambers" && smmmSelectionMode === "selected") {
+        requestBody.smmmChamberIds = selectedSmmmIds;
       }
 
       const response = await apiClient("/api/email-notifications/send-bulk", {
@@ -452,11 +526,21 @@ Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
 
   const applyTemplate = (template: (typeof templates)[0]) => {
     setAppliedTemplateId(template.templateId ?? null);
+    const useBrandedMailAssets =
+      template.templateId === "baro" || template.templateId === "smmm_info";
+    const defaultHeaderUrl =
+      template.templateId === "smmm_info"
+        ? "https://panel.bilirkisihesap.com/smmmmailsablon.png"
+        : "https://panel.bilirkisihesap.com/baromailsablon.png";
     setFormData((prev) => ({
       ...prev,
       ...(template.recipientType != null && { recipientType: template.recipientType }),
       subject: template.subject,
       message: template.message,
+      ...(useBrandedMailAssets && {
+        logoUrl: prev.logoUrl || "https://panel.bilirkisihesap.com/logo.png",
+        headerImageUrl: prev.headerImageUrl || defaultHeaderUrl,
+      }),
     }));
   };
 
@@ -497,6 +581,39 @@ Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
     [barsForSend, includeSecondaryEmail]
   );
 
+  const filteredSmmm = useMemo(
+    () =>
+      ACTIVE_SMMM_CHAMBERS.filter((c) =>
+        c.name.toLowerCase().includes(smmmSearch.toLowerCase())
+      ),
+    [smmmSearch]
+  );
+  const selectedSmmm = useMemo(
+    () => ACTIVE_SMMM_CHAMBERS.filter((c) => selectedSmmmIds.includes(c.id)),
+    [selectedSmmmIds]
+  );
+  const smmmForSend =
+    formData.recipientType !== "smmm_chambers"
+      ? []
+      : smmmSelectionMode === "all"
+        ? ACTIVE_SMMM_CHAMBERS
+        : selectedSmmm;
+  const missingEmailSmmm = useMemo(
+    () =>
+      smmmForSend
+        .filter((c) => collectSmmmRecipientEmails(c, includeSmmmSecondaryEmail).length === 0)
+        .map((c) => c.name),
+    [smmmForSend, includeSmmmSecondaryEmail]
+  );
+  const smmmRecipientEmailCount = useMemo(
+    () =>
+      smmmForSend.reduce(
+        (acc, c) => acc + collectSmmmRecipientEmails(c, includeSmmmSecondaryEmail).length,
+        0
+      ),
+    [smmmForSend, includeSmmmSecondaryEmail]
+  );
+
   const sendTestMail = async () => {
     try {
       if (!testEmail) {
@@ -515,7 +632,8 @@ Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
           logoUrl: formData.logoUrl,
           headerImageUrl: formData.headerImageUrl,
           demoAccess:
-            formData.recipientType === "bar_associations"
+            formData.recipientType === "bar_associations" ||
+            formData.recipientType === "smmm_chambers"
               ? {
                   username: formData.demoUsername,
                   password: formData.demoPassword,
@@ -670,6 +788,75 @@ Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
                   </div>
                 )}
 
+                {formData.recipientType === "smmm_chambers" && (
+                  <div className="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                    <Label>SMMM seçimi</Label>
+                    <div className="flex gap-4 text-sm">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          checked={smmmSelectionMode === "all"}
+                          onChange={() => setSmmmSelectionMode("all")}
+                        />
+                        Tüm aktif SMMM odaları
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          checked={smmmSelectionMode === "selected"}
+                          onChange={() => setSmmmSelectionMode("selected")}
+                        />
+                        Sadece seçili SMMM odaları
+                      </label>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={includeSmmmSecondaryEmail}
+                        onChange={(e) => setIncludeSmmmSecondaryEmail(e.target.checked)}
+                      />
+                      İkinci mail adreslerini de dahil et
+                    </label>
+                    {smmmSelectionMode === "selected" && (
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="SMMM odası ara..."
+                          value={smmmSearch}
+                          onChange={(e) => setSmmmSearch(e.target.value)}
+                        />
+                        <div className="max-h-48 overflow-auto rounded border border-gray-200 p-2 dark:border-gray-700">
+                          {filteredSmmm.map((c) => (
+                            <label key={c.id} className="flex items-center gap-2 py-1 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={selectedSmmmIds.includes(c.id)}
+                                onChange={(e) =>
+                                  setSelectedSmmmIds((prev) =>
+                                    e.target.checked
+                                      ? [...prev, c.id]
+                                      : prev.filter((id) => id !== c.id)
+                                  )
+                                }
+                              />
+                              <span>{c.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="text-xs text-gray-500">
+                      Seçilen SMMM odası: {smmmForSend.length} · Geçerli email: {smmmRecipientEmailCount}
+                      {missingEmailSmmm.length > 0 ? ` · Eksik mail: ${missingEmailSmmm.length}` : ""}
+                    </div>
+                    {missingEmailSmmm.length > 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Mail alanı eksik: {missingEmailSmmm.slice(0, 6).join(", ")}
+                        {missingEmailSmmm.length > 6 ? "..." : ""}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {formData.recipientType === "bar_associations" && (
                   <div className="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                     <Label>Baro seçimi</Label>
@@ -766,7 +953,8 @@ Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
                   </div>
                 )}
 
-                {formData.recipientType === "bar_associations" && (
+                {(formData.recipientType === "bar_associations" ||
+                  formData.recipientType === "smmm_chambers") && (
                   <div className="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                     <Label className="text-base font-semibold">Demo Erişim Bilgileri</Label>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -1284,8 +1472,20 @@ Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
           </DialogHeader>
           <div className="space-y-2 text-sm">
             <p><strong>Alıcı grubu:</strong> {recipientTypes.find((r) => r.value === formData.recipientType)?.label}</p>
+            {formData.recipientType === "smmm_chambers" && (
+              <>
+                <p><strong>Segment:</strong> SMMM</p>
+                <p><strong>Toplam SMMM odası:</strong> {smmmForSend.length}</p>
+                <p><strong>Toplam e-posta alıcısı:</strong> {smmmRecipientEmailCount}</p>
+                <p>
+                  <strong>Eksik mail adresi olan odalar:</strong>{" "}
+                  {missingEmailSmmm.length ? missingEmailSmmm.join(", ") : "Yok"}
+                </p>
+              </>
+            )}
             {formData.recipientType === "bar_associations" && (
               <>
+                <p><strong>Segment:</strong> BARO</p>
                 <p><strong>Toplam baro:</strong> {barsForSend.length}</p>
                 <p><strong>Toplam e-posta alıcısı:</strong> {barRecipientEmailCount}</p>
                 <p><strong>Eksik mail adresi olan barolar:</strong> {missingEmailBars.length ? missingEmailBars.join(", ") : "Yok"}</p>
