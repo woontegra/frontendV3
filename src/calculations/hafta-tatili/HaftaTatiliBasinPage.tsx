@@ -447,7 +447,10 @@ export default function HaftaTatiliBasinPage() {
     const gnd = [
       { label: "Brüt Hafta Tatili Alacağı", value: `${fmtTR(haftaTatiliNetSummary.brut)} ₺` },
       { label: "SGK İşçi Primi (%14)", value: `-${fmtTR(haftaTatiliNetSummary.ssk)} ₺` },
-      { label: "Gelir Vergisi", value: `-${fmtTR(haftaTatiliNetSummary.gelir)} ₺` },
+      {
+        label: `Gelir Vergisi${haftaTatiliNetSummary.gelirDilimleri ? ` ${haftaTatiliNetSummary.gelirDilimleri}` : ""}`,
+        value: `-${fmtTR(haftaTatiliNetSummary.gelir)} ₺`,
+      },
       { label: "Damga Vergisi (Binde 7,59)", value: `-${fmtTR(haftaTatiliNetSummary.damga)} ₺` },
       { label: "Net Hafta Tatili Alacağı", value: `${fmtTR(haftaTatiliNetSummary.net)} ₺` },
     ];

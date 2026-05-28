@@ -20,6 +20,7 @@ interface NetSummary {
   brut: number;
   ssk: number;
   gelir: number;
+  gelirDilimleri: string;
   damga: number;
   net: number;
   hakkaniyet: number;
@@ -117,12 +118,13 @@ export default function HaftaTatiliNetConversion(props: Props) {
       brut,
       ssk: ssk + issizlik,
       gelir,
+      gelirDilimleri: gelirLabel,
       damga,
       net,
       hakkaniyet,
       settleAmount,
     });
-  }, [brut, ssk, issizlik, gelir, damga, net, hakkaniyet, settleAmount]);
+  }, [brut, ssk, issizlik, gelir, gelirLabel, damga, net, hakkaniyet, settleAmount, onSummaryChange]);
 
   const handleBrutChange = (val: string) => {
     setBrutInput(val);

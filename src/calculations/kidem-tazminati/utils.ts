@@ -48,6 +48,8 @@ export const KIDEM_TAVAN_DONEMLERI = [
   { start: "01.07.2024", end: "31.12.2024", tavan: 41828.42 },
   { start: "01.01.2025", end: "30.06.2025", tavan: 46655.43 },
   { start: "01.07.2025", end: "31.12.2025", tavan: 53919.68 },
+  { start: "01.01.2026", end: "30.06.2026", tavan: 64948.77 },
+  { start: "01.07.2026", end: "31.12.2026", tavan: 64948.77 },
 ];
 
 export function findKidemTavan(exitDate: Date): number | null {

@@ -32,6 +32,7 @@ import {
   calculateGelirVergisi,
   calculateNetDisplay,
 } from "./calculations";
+import { calculateIncomeTaxWithBrackets } from "@/calculations/davaci-ucreti/engine/incomeTaxCore";
 import { downloadPdfFromDOM } from "@/utils/pdfExport";
 import { adaptToWordTable } from "@/utils/wordTableAdapter";
 import { buildWordTable } from "@/utils/wordTableBuilder";
@@ -138,6 +139,13 @@ export default function Ihbar30Page() {
   const damgaVergisi = calculateDamgaVergisi(brutIhbar);
   const gelirVergisi = calculateGelirVergisi(brutIhbar, exitYear);
   const netDisplay = calculateNetDisplay(brutIhbar, exitYear);
+  const gelirVergisiDilimleri = useMemo(() => {
+    if (brutIhbar <= 0) return "";
+    return calculateIncomeTaxWithBrackets(exitYear, brutIhbar).summary;
+  }, [brutIhbar, exitYear]);
+  const gelirVergisiLabel = gelirVergisiDilimleri
+    ? `Gelir Vergisi ${gelirVergisiDilimleri}`
+    : "Gelir Vergisi";
 
   useEffect(() => {
     if (appliedEklenti) {
@@ -349,14 +357,14 @@ export default function Ihbar30Page() {
     s.push({ id: "ihbar-hesap", title: "İhbar Tazminatı Hesaplaması", html: buildWordTable(nIhbar.headers, nIhbar.rows), htmlForPdf: buildStyledReportTable(nIhbar.headers, nIhbar.rows, { lastRowBg: "blue" }) });
     const grossNet: { label: string; value: string }[] = [
       { label: "Brüt İhbar Tazminatı", value: fmtCurrency(brutIhbar) },
-      { label: "Gelir Vergisi", value: `-${fmtCurrency(gelirVergisi)}` },
+      { label: gelirVergisiLabel, value: `-${fmtCurrency(gelirVergisi)}` },
       { label: "Damga Vergisi (Binde 7,59)", value: `-${fmtCurrency(damgaVergisi)}` },
       { label: "Net İhbar Tazminatı", value: fmtCurrency(netDisplay) },
     ];
     const n3 = adaptToWordTable(grossNet);
     s.push({ id: "brutnet", title: "Brüt'ten Net'e", html: buildWordTable(n3.headers, n3.rows), htmlForPdf: buildStyledReportTable(n3.headers, n3.rows, { lastRowBg: "green" }) });
     return s;
-  }, [iseGiris, istenCikis, diff.label, formValues, toplamBrut, brutIhbar, damgaVergisi, gelirVergisi, netDisplay, weeks]);
+  }, [iseGiris, istenCikis, diff.label, formValues, toplamBrut, brutIhbar, damgaVergisi, gelirVergisi, gelirVergisiLabel, netDisplay, weeks]);
 
   const handlePrint = () => {
     const el = document.getElementById("report-content");
@@ -479,7 +487,7 @@ export default function Ihbar30Page() {
                 <div className="px-2.5 py-2 border-b border-gray-200 dark:border-gray-600"><h3 className={sectionTitleCls}>Brütten Nete</h3></div>
                 <div className="p-2.5 space-y-1 text-xs">
                   <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600"><span className="text-gray-600 dark:text-gray-400">Brüt İhbar Tazminatı</span><span className="font-medium">{fmtCurrency(brutIhbar)}</span></div>
-                  <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600 text-red-600 dark:text-red-400"><span>Gelir Vergisi</span><span>-{fmtCurrency(gelirVergisi)}</span></div>
+                  <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600 text-red-600 dark:text-red-400"><span>{gelirVergisiLabel}</span><span>-{fmtCurrency(gelirVergisi)}</span></div>
                   <div className="flex justify-between py-0.5 border-b border-gray-200 dark:border-gray-600 text-red-600 dark:text-red-400"><span>Damga Vergisi (Binde 7,59)</span><span>-{fmtCurrency(damgaVergisi)}</span></div>
                   <div className="flex justify-between pt-1.5 font-semibold text-green-700 dark:text-green-400"><span>Net İhbar Tazminatı</span><span>{fmtCurrency(netDisplay)}</span></div>
                 </div>

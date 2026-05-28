@@ -27,6 +27,7 @@ export interface UbgtNetConversionProps {
     brut: number;
     ssk: number;
     gelir: number;
+    gelirDilimleri: string;
     damga: number;
     net: number;
     hakkaniyet: number;
@@ -169,6 +170,7 @@ export default function UbgtNetConversion({
       brut: ubgtBrutYillik,
       ssk: ubgtSskPrimCombined,
       gelir: ubgtGelirVergisi,
+      gelirDilimleri: gelirVergisiDilimleri,
       damga: ubgtDamgaVergisi,
       net: ubgtNetYillik,
       hakkaniyet: ubgtHakkaniyetIndirimi,
@@ -179,6 +181,7 @@ export default function UbgtNetConversion({
     ubgtBrutYillik,
     ubgtSskPrimCombined,
     ubgtGelirVergisi,
+    gelirVergisiDilimleri,
     ubgtDamgaVergisi,
     ubgtNetYillik,
     ubgtHakkaniyetIndirimi,

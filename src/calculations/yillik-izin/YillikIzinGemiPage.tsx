@@ -241,12 +241,16 @@ export default function YillikIzinGemiPage() {
         net: 0,
       };
     if (brutIzin > 0) {
+      const matrah = Math.max(0, brut - sgk - issizlik);
+      const dilimleri =
+        gelirVergisiDilimleri ||
+        calculateIncomeTaxWithBrackets(selectedYear, matrah).brackets;
       return {
         brut,
         sgk,
         issizlik,
         gelirVergisi,
-        gelirVergisiDilimleri,
+        gelirVergisiDilimleri: dilimleri,
         damgaVergisi,
         net: netIzin,
       };

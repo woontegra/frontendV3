@@ -6,6 +6,7 @@ import { apiClient } from "@/utils/apiClient";
 import { calcWorkPeriodBilirKisi } from "@/utils/dateUtils";
 import { Button } from "@/components/ui/button";
 import { getAsgariUcretByDate } from "@modules/fazla-mesai/shared";
+import { calculateIncomeTaxWithBrackets } from "@/shared/utils/incomeTaxCore";
 import { useToast } from "@/context/ToastContext";
 import {
   getAllExclusionSets,
@@ -27,8 +28,57 @@ const createEmptyRow = (): UsedRow => ({
 const createInitialRows = (count = 7): UsedRow[] =>
   Array.from({ length: count }, () => createEmptyRow());
 
+/** Gün sayısı alanları için (ücret parse etmez) */
 const toDays = (value: string) =>
   Number(String(value ?? "").replace(/\./g, "").replace(",", ".")) || 0;
+
+const round2 = (n: number) => Math.round((n || 0) * 100) / 100;
+
+/** TR para formatı: 35.000 veya 35.000,00 → 35000 */
+const parseBrutUcret = (value: string | number): number => {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || Number.isNaN(value)) return 0;
+    return value;
+  }
+  const trimmed = String(value ?? "")
+    .trim()
+    .replace(/₺/g, "")
+    .replace(/\s/g, "");
+  if (!trimmed) return 0;
+  const cleaned = trimmed.replace(/\./g, "").replace(",", ".");
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) && !Number.isNaN(parsed) ? parsed : 0;
+};
+
+const computeBrutIzin = (brutUcret: number, remainingDays: number) =>
+  round2((brutUcret / 30) * remainingDays);
+
+const computeNetFromBrutIzin = (brutIzin: number, year: number) => {
+  if (brutIzin <= 0) {
+    return {
+      sgk: 0,
+      issizlik: 0,
+      gelirVergisi: 0,
+      gelirVergisiDilimleri: "",
+      damgaVergisi: 0,
+      netIzin: 0,
+    };
+  }
+  const sgk = round2(brutIzin * 0.14);
+  const issizlik = round2(brutIzin * 0.01);
+  const matrah = Math.max(0, brutIzin - sgk - issizlik);
+  const gv = calculateIncomeTaxWithBrackets(year, matrah);
+  const damgaVergisi = round2(brutIzin * 0.00759);
+  const netIzin = round2(Math.max(0, brutIzin - sgk - issizlik - gv.tax - damgaVergisi));
+  return {
+    sgk,
+    issizlik,
+    gelirVergisi: gv.tax,
+    gelirVergisiDilimleri: gv.brackets,
+    damgaVergisi,
+    netIzin,
+  };
+};
 
 function exclusionRowsToUsedRows(data: ExcludedDay[]): UsedRow[] {
   if (!data.length) return createInitialRows(7);
@@ -98,6 +148,7 @@ export default function YillikIzinBasinGunlukOlmayanPage() {
   const [sgk, setSgk] = useState(0);
   const [issizlik, setIssizlik] = useState(0);
   const [gelirVergisi, setGelirVergisi] = useState(0);
+  const [gelirVergisiDilimleri, setGelirVergisiDilimleri] = useState("");
   const [damgaVergisi, setDamgaVergisi] = useState(0);
   const [netIzin, setNetIzin] = useState(0);
 
@@ -161,9 +212,13 @@ export default function YillikIzinBasinGunlukOlmayanPage() {
     return new Date().getFullYear();
   }, [istenCikis]);
 
+  const gelirVergisiLabel = gelirVergisiDilimleri
+    ? `Gelir vergisi ${gelirVergisiDilimleri}`
+    : "Gelir vergisi";
+
   const asgariUcretHatasi = useMemo(() => {
     if (!istenCikis || !brutUcret) return null;
-    const girilenUcret = parseFloat(String(brutUcret).replace(/\./g, "").replace(",", "."));
+    const girilenUcret = parseBrutUcret(brutUcret);
     if (isNaN(girilenUcret) || girilenUcret <= 0) return null;
     const asgariUcret = getAsgariUcretByDate(istenCikis);
     if (!asgariUcret) return null;
@@ -183,7 +238,7 @@ export default function YillikIzinBasinGunlukOlmayanPage() {
 
   useEffect(() => {
     const run = async () => {
-      if (!meslegeBaslangic || !istenCikis || toDays(brutUcret) <= 0) {
+      if (!meslegeBaslangic || !istenCikis || parseBrutUcret(brutUcret) <= 0) {
         setCalcError("");
         setIzinHesaplama({ izinGun: 0, devre: 0, toplamAy: 0, hafta: 0 });
         setUsedTotal(0);
@@ -192,6 +247,7 @@ export default function YillikIzinBasinGunlukOlmayanPage() {
         setSgk(0);
         setIssizlik(0);
         setGelirVergisi(0);
+        setGelirVergisiDilimleri("");
         setDamgaVergisi(0);
         setNetIzin(0);
         return;
@@ -207,7 +263,7 @@ export default function YillikIzinBasinGunlukOlmayanPage() {
           body: JSON.stringify({
             meslegeBaslangic,
             istenCikis,
-            brutUcret: toDays(brutUcret),
+            brutUcret: parseBrutUcret(brutUcret),
             usedDays,
             year: selectedYear,
           }),
@@ -217,6 +273,11 @@ export default function YillikIzinBasinGunlukOlmayanPage() {
           setCalcError(result?.error || `Hesaplama başarısız (HTTP ${response.status})`);
           return;
         }
+        const remaining = result.data.remainingDays || 0;
+        const parsedBrut = parseBrutUcret(brutUcret);
+        const brutIzinHesap = computeBrutIzin(parsedBrut, remaining);
+        const net = computeNetFromBrutIzin(brutIzinHesap, selectedYear);
+
         setIzinHesaplama({
           izinGun: result.data.izinGun || 0,
           devre: result.data.devre || 0,
@@ -224,13 +285,14 @@ export default function YillikIzinBasinGunlukOlmayanPage() {
           hafta: result.data.hafta || 0,
         });
         setUsedTotal(result.data.usedDays || 0);
-        setRemainingDays(result.data.remainingDays || 0);
-        setBrutIzin(result.data.brutIzin || 0);
-        setSgk(result.data.sgk || 0);
-        setIssizlik(result.data.issizlik || 0);
-        setGelirVergisi(result.data.gelirVergisi || 0);
-        setDamgaVergisi(result.data.damgaVergisi || 0);
-        setNetIzin(result.data.netIzin || 0);
+        setRemainingDays(remaining);
+        setBrutIzin(brutIzinHesap);
+        setSgk(net.sgk);
+        setIssizlik(net.issizlik);
+        setGelirVergisi(net.gelirVergisi);
+        setGelirVergisiDilimleri(net.gelirVergisiDilimleri);
+        setDamgaVergisi(net.damgaVergisi);
+        setNetIzin(net.netIzin);
       } catch (e) {
         setCalcError(e instanceof Error ? e.message : "Hesaplama hatası");
       } finally {
@@ -444,7 +506,7 @@ export default function YillikIzinBasinGunlukOlmayanPage() {
                 <div className="flex justify-between gap-2 border-b border-purple-200/50 dark:border-purple-900/40 pb-2">
                   <span>Günlük ücret (toplam/30)</span>
                   <span className="font-medium text-right">
-                    ({fmt(toDays(brutUcret))}₺ / 30 × {remainingDays} gün)
+                    ({fmt(parseBrutUcret(brutUcret))}₺ / 30 × {remainingDays} gün)
                   </span>
                 </div>
                 <div className="flex justify-between gap-2 pt-1">
@@ -461,7 +523,7 @@ export default function YillikIzinBasinGunlukOlmayanPage() {
                   ["Brüt yıllık izin ücreti", brutIzin, false],
                   ["SGK primi (%14)", -sgk, true],
                   ["İşsizlik primi (%1)", -issizlik, true],
-                  ["Gelir vergisi", -gelirVergisi, true],
+                  [gelirVergisiLabel, -gelirVergisi, true],
                   ["Damga vergisi (binde 7,59)", -damgaVergisi, true],
                 ].map(([label, val, neg]) => (
                   <div

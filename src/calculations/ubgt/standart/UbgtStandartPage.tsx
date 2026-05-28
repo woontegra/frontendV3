@@ -457,7 +457,16 @@ export default function UbgtStandartPage() {
   const [rowOverrides, setRowOverrides] = useState<Record<string, Partial<FazlaMesaiRowBase>>>({});
 
   // Net/mahsuplaşma özetleri (child'dan alınır)
-  const [ubgtNetSummary, setUbgtNetSummary] = useState<{ brut: number; ssk: number; gelir: number; damga: number; net: number; hakkaniyet: number; settleAmount: string }>({ brut: 0, ssk: 0, gelir: 0, damga: 0, net: 0, hakkaniyet: 0, settleAmount: "" });
+  const [ubgtNetSummary, setUbgtNetSummary] = useState<{
+    brut: number;
+    ssk: number;
+    gelir: number;
+    gelirDilimleri: string;
+    damga: number;
+    net: number;
+    hakkaniyet: number;
+    settleAmount: string;
+  }>({ brut: 0, ssk: 0, gelir: 0, gelirDilimleri: "", damga: 0, net: 0, hakkaniyet: 0, settleAmount: "" });
   
   // Mahsuplaşma modal verileri
   const [ubgtMahsuplasamaData, setUbgtMahsuplasamaData] = useState<{ [year: number]: { [holidayName: string]: number } }>({});
@@ -1118,7 +1127,11 @@ export default function UbgtStandartPage() {
         rows: [
           { label: "Brüt UBGT Alacağı", value: `${fmt(ubgtNetSummary.brut)}₺` },
           { label: "SGK İşçi Primi (%15)", value: `-${fmt(ubgtNetSummary.ssk)}₺`, isDeduction: true },
-          { label: "Gelir Vergisi", value: `-${fmt(ubgtNetSummary.gelir)}₺`, isDeduction: true },
+          {
+            label: `Gelir Vergisi${ubgtNetSummary.gelirDilimleri ? ` ${ubgtNetSummary.gelirDilimleri}` : ""}`,
+            value: `-${fmt(ubgtNetSummary.gelir)}₺`,
+            isDeduction: true,
+          },
           { label: "Damga Vergisi (Binde 7,59)", value: `-${fmt(ubgtNetSummary.damga)}₺`, isDeduction: true },
           { label: "Net UBGT Alacağı", value: `${fmt(ubgtNetSummary.net)}₺`, isNet: true },
         ],

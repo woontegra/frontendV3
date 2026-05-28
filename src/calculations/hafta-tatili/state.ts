@@ -44,6 +44,7 @@ export interface HaftaTatiliNetSummary {
   brut: number;
   ssk: number;
   gelir: number;
+  gelirDilimleri: string;
   damga: number;
   net: number;
   hakkaniyet: number;
@@ -87,6 +88,7 @@ export function useHaftaTatiliState() {
     brut: 0,
     ssk: 0,
     gelir: 0,
+    gelirDilimleri: "",
     damga: 0,
     net: 0,
     hakkaniyet: 0,

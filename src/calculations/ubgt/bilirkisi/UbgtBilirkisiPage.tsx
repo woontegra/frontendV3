@@ -298,6 +298,7 @@ export default function UbgtBilirkisiPage() {
     brut: 0,
     ssk: 0,
     gelir: 0,
+    gelirDilimleri: "",
     damga: 0,
     net: 0,
     hakkaniyet: 0,
@@ -940,7 +941,11 @@ export default function UbgtBilirkisiPage() {
         rows: [
           { label: "Brüt UBGT alacağı", value: `${fmt(ubgtNetSummary.brut)}₺` },
           { label: "SGK işçi primi (%15)", value: `-${fmt(ubgtNetSummary.ssk)}₺`, isDeduction: true },
-          { label: "Gelir vergisi", value: `-${fmt(ubgtNetSummary.gelir)}₺`, isDeduction: true },
+          {
+            label: `Gelir vergisi${ubgtNetSummary.gelirDilimleri ? ` ${ubgtNetSummary.gelirDilimleri}` : ""}`,
+            value: `-${fmt(ubgtNetSummary.gelir)}₺`,
+            isDeduction: true,
+          },
           { label: "Damga vergisi (binde 7,59)", value: `-${fmt(ubgtNetSummary.damga)}₺`, isDeduction: true },
           { label: "Net UBGT alacağı", value: `${fmt(ubgtNetSummary.net)}₺`, isNet: true },
         ],
