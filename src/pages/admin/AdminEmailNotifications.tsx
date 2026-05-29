@@ -55,6 +55,30 @@ type BaroTracking = {
   barAssociation: { id: number; name: string; city: string | null } | null;
 };
 
+type SmmmTracking = {
+  id: number;
+  recipientEmail: string;
+  recipientName: string | null;
+  subject: string;
+  status: "PENDING" | "SENT" | "FAILED";
+  sentAt: string | null;
+  openedAt: string | null;
+  clickedAt: string | null;
+  lastOpenedAt: string | null;
+  lastClickedAt: string | null;
+  openCount: number;
+  clickCount: number;
+  contractDownloadedAt: string | null;
+  errorMessage: string | null;
+  segment: string;
+};
+
+function formatTrackingDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString("tr-TR");
+}
+
 function normalizeImageUrl(value: string): string {
   if (!value) return "";
   const v = value.trim();
@@ -86,9 +110,22 @@ export default function AdminEmailNotifications() {
   const [trackingPageSize, setTrackingPageSize] = useState(10);
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackingSearch, setTrackingSearch] = useState("");
+  const [smmmTrackingSummary, setSmmmTrackingSummary] = useState<{
+    sentCount?: number;
+    openedCount?: number;
+    clickedCount?: number;
+    contractDownloadedCount?: number;
+    failedCount?: number;
+  } | null>(null);
+  const [smmmTrackingRows, setSmmmTrackingRows] = useState<SmmmTracking[]>([]);
+  const [smmmTrackingLoading, setSmmmTrackingLoading] = useState(false);
+  const [smmmTrackingSearch, setSmmmTrackingSearch] = useState("");
+  const [currentSmmmTrackingPage, setCurrentSmmmTrackingPage] = useState(1);
+  const [smmmTrackingPageSize, setSmmmTrackingPageSize] = useState(10);
   const [trackingEventsOpen, setTrackingEventsOpen] = useState(false);
   const [trackingEvents, setTrackingEvents] = useState<any[]>([]);
   const [trackingEventsTitle, setTrackingEventsTitle] = useState("");
+  const [trackingEventsSource, setTrackingEventsSource] = useState<"baro" | "smmm">("baro");
   const [protocolUploadFile, setProtocolUploadFile] = useState<File | null>(null);
   const [protocolUploading, setProtocolUploading] = useState(false);
   const [applySameProtocolToAll, setApplySameProtocolToAll] = useState(false);
@@ -271,6 +308,30 @@ Bu e-posta, Bilirkişi Hesaplama Araçları hakkında bilgilendirme amacıyla g�
     }
   }, [trackingSearch]);
 
+  const loadSmmmTracking = useCallback(async () => {
+    setSmmmTrackingLoading(true);
+    try {
+      const [summaryRes, listRes] = await Promise.all([
+        apiClient("/api/admin/smmm-email-trackings/summary"),
+        apiClient(
+          `/api/admin/smmm-email-trackings${smmmTrackingSearch ? `?search=${encodeURIComponent(smmmTrackingSearch)}` : ""}`
+        ),
+      ]);
+      const summaryData = await summaryRes.json();
+      const listData = await listRes.json();
+      if (summaryRes.ok && summaryData.success) setSmmmTrackingSummary(summaryData.summary);
+      if (listRes.ok && listData.success) {
+        setSmmmTrackingRows(listData.items || []);
+        setCurrentSmmmTrackingPage(1);
+      }
+    } catch {
+      setSmmmTrackingRows([]);
+      setCurrentSmmmTrackingPage(1);
+    } finally {
+      setSmmmTrackingLoading(false);
+    }
+  }, [smmmTrackingSearch]);
+
   useEffect(() => {
     loadBars();
   }, [loadBars]);
@@ -278,6 +339,10 @@ Bu e-posta, Bilirkişi Hesaplama Araçları hakkında bilgilendirme amacıyla g�
   useEffect(() => {
     loadTracking();
   }, [loadTracking]);
+
+  useEffect(() => {
+    loadSmmmTracking();
+  }, [loadSmmmTracking]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -398,6 +463,7 @@ Bu e-posta, Bilirkişi Hesaplama Araçları hakkında bilgilendirme amacıyla g�
           : "Email başarıyla gönderildi."
       );
       setAppliedTemplateId(null);
+      loadSmmmTracking();
       setFormData((prev) => ({
         ...prev,
         recipientType: "all",
@@ -650,6 +716,7 @@ Bu e-posta, Bilirkişi Hesaplama Araçları hakkında bilgilendirme amacıyla g�
       if (!res.ok || !data.success) throw new Error(data.error || "Test email gönderilemedi");
       success("Test email gönderildi");
       loadTracking();
+      loadSmmmTracking();
     } catch (e: any) {
       error(e?.message || "Test email gönderilemedi");
     } finally {
@@ -664,6 +731,21 @@ Bu e-posta, Bilirkişi Hesaplama Araçları hakkında bilgilendirme amacıyla g�
       if (!res.ok || !data.success) throw new Error(data.error || "Event listesi alınamadı");
       setTrackingEvents(data.events || []);
       setTrackingEventsTitle(`${row.barAssociation?.name || "Baro"} - ${row.recipientEmail}`);
+      setTrackingEventsSource("baro");
+      setTrackingEventsOpen(true);
+    } catch (e: any) {
+      error(e?.message || "Event listesi alınamadı");
+    }
+  };
+
+  const openSmmmEvents = async (row: SmmmTracking) => {
+    try {
+      const res = await apiClient(`/api/admin/smmm-email-trackings/${row.id}/events`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Event listesi alınamadı");
+      setTrackingEvents(data.events || []);
+      setTrackingEventsTitle(`${row.recipientName || "SMMM Odası"} - ${row.recipientEmail}`);
+      setTrackingEventsSource("smmm");
       setTrackingEventsOpen(true);
     } catch (e: any) {
       error(e?.message || "Event listesi alınamadı");
@@ -714,6 +796,16 @@ Bu e-posta, Bilirkişi Hesaplama Araçları hakkında bilgilendirme amacıyla g�
   }, [trackingRows, currentTrackingPage, trackingPageSize]);
   const allSelectedOnPage =
     pagedTrackingRows.length > 0 && pagedTrackingRows.every((r) => selectedTrackingIds.includes(r.id));
+
+  const smmmTrackingTotalPages = Math.max(1, Math.ceil(smmmTrackingRows.length / smmmTrackingPageSize));
+  const pagedSmmmTrackingRows = useMemo(() => {
+    const start = (currentSmmmTrackingPage - 1) * smmmTrackingPageSize;
+    return smmmTrackingRows.slice(start, start + smmmTrackingPageSize);
+  }, [smmmTrackingRows, currentSmmmTrackingPage, smmmTrackingPageSize]);
+
+  useEffect(() => {
+    if (currentSmmmTrackingPage > smmmTrackingTotalPages) setCurrentSmmmTrackingPage(smmmTrackingTotalPages);
+  }, [currentSmmmTrackingPage, smmmTrackingTotalPages]);
 
   useEffect(() => {
     if (currentTrackingPage > trackingTotalPages) setCurrentTrackingPage(trackingTotalPages);
@@ -1367,6 +1459,155 @@ Bu e-posta, Bilirkişi Hesaplama Araçları hakkında bilgilendirme amacıyla g�
         </CardContent>
       </Card>
 
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">SMMM Mail Takipleri</CardTitle>
+          <CardDescription className="text-sm font-normal">
+            SMMM toplu maillerinde açılma ve kampanya/giriş linki tıklamaları. Gönderim öncesi önizlemede örnek tracking URL’leri gösterilir.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            {[
+              ["Gönderilen", smmmTrackingSummary?.sentCount ?? 0],
+              ["Açılan", smmmTrackingSummary?.openedCount ?? 0],
+              ["Tıklanan", smmmTrackingSummary?.clickedCount ?? 0],
+              ["Sözleşme İndirilen", smmmTrackingSummary?.contractDownloadedCount ?? 0],
+              ["Hatalı", smmmTrackingSummary?.failedCount ?? 0],
+            ].map(([k, v]) => (
+              <div key={String(k)} className="rounded border border-gray-200 p-2 text-sm dark:border-gray-700">
+                <div className="text-xs text-gray-500">{k}</div>
+                <div className="font-semibold">{v as number}</div>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Oda / mail / konu ara..."
+              value={smmmTrackingSearch}
+              onChange={(e) => setSmmmTrackingSearch(e.target.value)}
+            />
+            <Button variant="outline" onClick={loadSmmmTracking}>
+              Yenile
+            </Button>
+          </div>
+          <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-700">
+            <table className="w-full min-w-[1200px] text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-800/80">
+                <tr>
+                  {[
+                    "Oda",
+                    "E-posta",
+                    "Konu",
+                    "Gönderildi",
+                    "Açıldı",
+                    "Tıklandı",
+                    "Sözleşme/Protokol İndirildi",
+                    "Açılma",
+                    "Tıklama",
+                    "Durum",
+                    "Hata",
+                    "İşlemler",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="px-3 py-2 text-left text-xs font-medium tracking-tight text-gray-600 dark:text-gray-300"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {smmmTrackingLoading ? (
+                  <tr>
+                    <td colSpan={12} className="px-3 py-2">
+                      Yükleniyor...
+                    </td>
+                  </tr>
+                ) : smmmTrackingRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="px-3 py-2">
+                      Kayıt yok.
+                    </td>
+                  </tr>
+                ) : (
+                  pagedSmmmTrackingRows.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="border-t border-gray-100 text-[13px] font-normal text-gray-700 dark:border-gray-800 dark:text-gray-300"
+                    >
+                      <td className="px-3 py-2">{r.recipientName || "-"}</td>
+                      <td className="px-3 py-2">{r.recipientEmail}</td>
+                      <td className="px-3 py-2">{r.subject}</td>
+                      <td className="px-3 py-2">{r.sentAt ? "Evet" : "-"}</td>
+                      <td className="px-3 py-2">{r.openedAt ? "Evet" : "-"}</td>
+                      <td className="px-3 py-2">{r.clickedAt ? "Evet" : "-"}</td>
+                      <td className="px-3 py-2">{r.contractDownloadedAt ? "Evet" : "-"}</td>
+                      <td className="px-3 py-2">{formatTrackingDate(r.lastOpenedAt || r.openedAt)}</td>
+                      <td className="px-3 py-2">{formatTrackingDate(r.lastClickedAt || r.clickedAt)}</td>
+                      <td className="px-3 py-2">
+                        <Badge variant={r.status === "FAILED" ? "destructive" : "secondary"}>
+                          {r.status === "SENT" ? "Gönderildi" : r.status === "FAILED" ? "Hatalı" : "Bekliyor"}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 max-w-[180px] truncate" title={r.errorMessage || ""}>
+                        {r.errorMessage || "-"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Button size="sm" variant="outline" onClick={() => openSmmmEvents(r)}>
+                          Event Detayı
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {!smmmTrackingLoading && smmmTrackingRows.length > 0 && (
+            <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+              <div className="flex items-center gap-2">
+                <span>Sayfa başına</span>
+                <select
+                  value={smmmTrackingPageSize}
+                  onChange={(e) => {
+                    setSmmmTrackingPageSize(Number(e.target.value));
+                    setCurrentSmmmTrackingPage(1);
+                  }}
+                  className="rounded border border-gray-200 bg-white px-2 py-1 text-xs dark:border-gray-600 dark:bg-gray-800"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+                <span>
+                  Toplam {smmmTrackingRows.length} kayıt · Sayfa {currentSmmmTrackingPage}/{smmmTrackingTotalPages}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentSmmmTrackingPage((p) => Math.max(1, p - 1))}
+                  disabled={currentSmmmTrackingPage <= 1}
+                >
+                  Önceki
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentSmmmTrackingPage((p) => Math.min(smmmTrackingTotalPages, p + 1))}
+                  disabled={currentSmmmTrackingPage >= smmmTrackingTotalPages}
+                >
+                  Sonraki
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Abonelikten Çıkanlar / Kara Liste */}
       <Card className="mt-6">
         <CardHeader>
@@ -1481,6 +1722,20 @@ Bu e-posta, Bilirkişi Hesaplama Araçları hakkında bilgilendirme amacıyla g�
                   <strong>Eksik mail adresi olan odalar:</strong>{" "}
                   {missingEmailSmmm.length ? missingEmailSmmm.join(", ") : "Yok"}
                 </p>
+                {(appliedTemplateId === "smmm_info" || formData.recipientType === "smmm_chambers") && (
+                  <div className="rounded bg-gray-50 p-2 text-xs dark:bg-gray-800">
+                    <p className="font-medium">SMMM tracking (gönderimde alıcı başına token üretilir)</p>
+                    <p className="mt-1 break-all">
+                      Açılma: https://api.bilirkisihesap.com/api/public/smmm-email-tracking/&#123;token&#125;/open
+                    </p>
+                    <p className="mt-1 break-all">
+                      Kampanya: https://api.bilirkisihesap.com/api/public/smmm-campaign/&#123;token&#125;/click
+                    </p>
+                    <p className="mt-1 break-all">
+                      Protokol: https://api.bilirkisihesap.com/api/public/smmm-contract/&#123;token&#125;/download
+                    </p>
+                  </div>
+                )}
               </>
             )}
             {formData.recipientType === "bar_associations" && (
