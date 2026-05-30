@@ -223,6 +223,18 @@
   background: var(--page);
 }
 
+.mobileBackdrop {
+  position: fixed;
+  inset: 0;
+  top: 4rem;
+  z-index: 40;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: rgba(15, 23, 42, 0.45);
+  cursor: pointer;
+}
+
 @media (max-width: 900px) {
   .body,
   .bodyCollapsed {
@@ -232,6 +244,19 @@
   .sidebar,
   .sidebarCollapsed {
     display: none;
+  }
+
+  .sidebar.sidebarMobileOpen {
+    display: flex;
+    position: fixed;
+    top: 4rem;
+    left: 0;
+    bottom: 0;
+    z-index: 45;
+    width: 15rem;
+    max-width: min(15rem, 85vw);
+    height: calc(100vh - 4rem);
+    box-shadow: 4px 0 24px rgba(15, 23, 42, 0.14);
   }
 
   .main {

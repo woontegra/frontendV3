@@ -1,6 +1,6 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { ChevronRight, LayoutDashboard, Menu, Shield, Wrench } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { calculationModules, type CalculationModuleRoute } from "@/calculations/registry";
 import GlobalCalculationTools from "@/components/GlobalCalculationTools";
 import StarterWelcomeModal from "@/components/StarterWelcomeModal";
@@ -43,6 +43,24 @@ function renderCalculationSidebarInterior(module: CalculationModuleRoute) {
   );
 }
 
+const MOBILE_BREAKPOINT_PX = 900;
+
+function useIsMobile(breakpoint = MOBILE_BREAKPOINT_PX) {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(`(max-width: ${breakpoint}px)`).matches,
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const sync = () => setIsMobile(mediaQuery.matches);
+    sync();
+    mediaQuery.addEventListener("change", sync);
+    return () => mediaQuery.removeEventListener("change", sync);
+  }, [breakpoint]);
+
+  return isMobile;
+}
+
 function readIsAdmin(): boolean {
   try {
     const currentUser = JSON.parse(localStorage.getItem("current_user") || "null") as {
@@ -57,18 +75,61 @@ function readIsAdmin(): boolean {
 }
 
 export default function AppShell() {
+  const location = useLocation();
+  const isMobile = useIsMobile();
   const { open: starterWelcomeOpen, onClose: onStarterWelcomeClose } = useDemoStarterWelcome();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem("sidebarCollapsed") === "true",
   );
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isAdmin = readIsAdmin();
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileMenuOpen(false);
+    }
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!isMobile || !mobileMenuOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMobileMenuOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [isMobile, mobileMenuOpen]);
+
   function handleSidebarToggle() {
+    if (isMobile) {
+      setMobileMenuOpen((open) => !open);
+      return;
+    }
+
     setSidebarCollapsed((value) => {
       const next = !value;
       localStorage.setItem("sidebarCollapsed", String(next));
       return next;
     });
+  }
+
+  function closeMobileMenu() {
+    setMobileMenuOpen(false);
   }
 
   return (
@@ -80,10 +141,32 @@ export default function AppShell() {
         } as CSSProperties
       }
     >
-      <AppHeader sidebarCollapsed={sidebarCollapsed} onSidebarToggle={handleSidebarToggle} />
+      <AppHeader
+        sidebarCollapsed={sidebarCollapsed}
+        mobileMenuOpen={mobileMenuOpen}
+        isMobile={isMobile}
+        onSidebarToggle={handleSidebarToggle}
+      />
+
+      {isMobile && mobileMenuOpen ? (
+        <button
+          type="button"
+          className={styles.mobileBackdrop}
+          aria-label="Menüyü kapat"
+          onClick={closeMobileMenu}
+        />
+      ) : null}
 
       <div className={`${styles.body} ${sidebarCollapsed ? styles.bodyCollapsed : ""}`}>
-        <aside className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
+        <aside
+          className={[
+            styles.sidebar,
+            sidebarCollapsed ? styles.sidebarCollapsed : "",
+            isMobile && mobileMenuOpen ? styles.sidebarMobileOpen : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           <nav className={styles.nav}>
             <NavLink
               to="/dashboard"

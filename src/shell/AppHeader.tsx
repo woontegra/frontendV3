@@ -32,10 +32,17 @@ type NotificationItem = {
 
 type Props = {
   sidebarCollapsed: boolean;
+  mobileMenuOpen?: boolean;
+  isMobile?: boolean;
   onSidebarToggle: () => void;
 };
 
-export default function AppHeader({ sidebarCollapsed, onSidebarToggle }: Props) {
+export default function AppHeader({
+  sidebarCollapsed,
+  mobileMenuOpen = false,
+  isMobile = false,
+  onSidebarToggle,
+}: Props) {
   const location = useLocation();
   const { user, logout } = useAuth();
   const isAdmin = readIsAdminHeader();
@@ -103,8 +110,17 @@ export default function AppHeader({ sidebarCollapsed, onSidebarToggle }: Props) 
         </Link>
         <button
           type="button"
-          className={styles.iconButton}
-          aria-label={sidebarCollapsed ? "Kenar çubuğunu aç" : "Kenar çubuğunu daralt"}
+          className={styles.menuButton}
+          aria-label={
+            isMobile
+              ? mobileMenuOpen
+                ? "Menüyü kapat"
+                : "Menüyü aç"
+              : sidebarCollapsed
+                ? "Kenar çubuğunu aç"
+                : "Kenar çubuğunu daralt"
+          }
+          aria-expanded={isMobile ? mobileMenuOpen : !sidebarCollapsed}
           onClick={onSidebarToggle}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
