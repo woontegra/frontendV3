@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { apiClient } from "@/utils/apiClient";
 import { getCaseEndDate, getCaseStartDate } from "./savedCaseDates";
+import styles from "./SavedCalculationsPage.module.css";
 
 type SavedCase = {
   id: number;
@@ -412,10 +413,10 @@ export default function SavedCalculationsPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap text-sm">
+          <div className={`${styles.toolbarActions} text-sm`}>
             {searchQuery && <span className="text-gray-500 dark:text-gray-400">{filteredCases.length} sonuç</span>}
             {selectedIds.length > 0 && <span className="font-medium text-blue-600">{selectedIds.length} kayıt seçildi</span>}
-            <div className="flex-1" />
+            <div className={styles.toolbarSpacer} />
             {selectedIds.length > 0 && (
               <Button variant="outline" size="sm" onClick={handleDeleteSelected} disabled={isDeleting}
                 className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 dark:text-red-400 dark:hover:bg-red-900/20 dark:border-red-900 gap-1.5">
@@ -445,11 +446,11 @@ export default function SavedCalculationsPage() {
             }
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700 text-[11px] sm:text-xs">
-              <thead className="bg-gray-50 dark:bg-gray-900/90">
+          <div className={styles.tableWrap}>
+            <table className={`${styles.table} divide-y divide-gray-200 dark:divide-gray-700`}>
+              <thead className={styles.thead}>
                 <tr>
-                  <th className="px-1 py-2 w-8 text-center">
+                  <th className={`${styles.th} ${styles.colCheck}`}>
                     <button onClick={toggleSelectAll}
                       className="inline-flex items-center justify-center hover:text-blue-600 transition-colors"
                       title={selectedIds.length === filteredCases.length ? "Tümünü Kaldır" : "Tümünü Seç"}>
@@ -458,25 +459,23 @@ export default function SavedCalculationsPage() {
                         : <Square className="h-4 w-4" />}
                     </button>
                   </th>
-                  <th className="px-1 py-2 w-6 text-left font-medium text-gray-500 dark:text-gray-300 uppercase">#</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-300 uppercase w-[26%]">Kayıt Adı</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-300 uppercase w-[12%]">Tarih</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-300 uppercase w-[12%]">Başlangıç</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-300 uppercase w-[12%]">Bitiş</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-300 uppercase w-[13%]">Net Toplam</th>
-                  <th className="px-2 py-2 text-right font-medium text-gray-500 dark:text-gray-300 uppercase w-[120px]">İşlemler</th>
+                  <th className={`${styles.th} ${styles.colIndex}`}>#</th>
+                  <th className={`${styles.th} ${styles.colName}`}>Kayıt Adı</th>
+                  <th className={`${styles.th} ${styles.colDate}`}>Tarih</th>
+                  <th className={`${styles.th} ${styles.colStart}`}>Başlangıç</th>
+                  <th className={`${styles.th} ${styles.colEnd}`}>Bitiş</th>
+                  <th className={`${styles.th} ${styles.colTotal}`}>Net Toplam</th>
+                  <th className={`${styles.th} ${styles.colActions}`}>İşlemler</th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className={`${styles.tbody} divide-y divide-gray-200 dark:divide-gray-700`}>
                 {filteredCases.map((c, idx) => {
                   const isSelected = selectedIds.includes(c.id);
                   const route = getRouteForType(c.hesaplama_tipi);
                   return (
                     <tr key={c.id}
-                      className={isSelected
-                        ? "bg-blue-50 dark:bg-blue-900/20"
-                        : "hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"}>
-                      <td className="px-2 py-2 text-center">
+                      className={isSelected ? styles.rowSelected : styles.row}>
+                      <td className={`${styles.td} ${styles.colCheck}`}>
                         <button onClick={() => toggleSelectId(c.id)}
                           className="inline-flex items-center justify-center hover:text-blue-600 transition-colors">
                           {isSelected
@@ -484,10 +483,10 @@ export default function SavedCalculationsPage() {
                             : <Square className="h-4 w-4 text-gray-400" />}
                         </button>
                       </td>
-                      <td className="px-2 py-2 text-gray-500 dark:text-gray-400">{idx + 1}</td>
+                      <td className={`${styles.td} ${styles.colIndex}`}>{idx + 1}</td>
 
                       {/* İsim — inline düzenleme */}
-                      <td className="px-2 py-2 min-w-0 overflow-hidden" onClick={e => e.stopPropagation()}>
+                      <td className={`${styles.td} ${styles.colName} ${styles.tdName}`} onClick={e => e.stopPropagation()}>
                         {editingNameId === c.id ? (
                           <Input
                             className="h-7 text-[11px] max-w-full"
@@ -503,7 +502,7 @@ export default function SavedCalculationsPage() {
                           />
                         ) : (
                           <button type="button"
-                            className="text-left font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-600 rounded px-1 py-0.5 w-full truncate block"
+                            className="text-left font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-600 rounded px-1 py-0.5 max-w-full truncate block"
                             title={c.kayit_adi || undefined}
                             onClick={() => { setEditingNameId(c.id); setEditingNameValue((c.kayit_adi || "").trim()); }}>
                             {savingNameId === c.id ? "Kaydediliyor..." : (c.kayit_adi || "—")}
@@ -511,28 +510,28 @@ export default function SavedCalculationsPage() {
                         )}
                       </td>
 
-                      <td className="px-2 py-2 text-gray-500 dark:text-gray-400 truncate">{fmtDate(c.created_at)}</td>
-                      <td className="px-2 py-2 text-gray-500 dark:text-gray-400 truncate">{fmtDate(c.ise_giris)}</td>
-                      <td className="px-2 py-2 text-gray-500 dark:text-gray-400 truncate">{fmtDate(c.isten_cikis)}</td>
-                      <td className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 truncate">
+                      <td className={`${styles.td} ${styles.colDate} ${styles.tdDate}`}>{fmtDate(c.created_at)}</td>
+                      <td className={`${styles.td} ${styles.colStart} ${styles.tdDate}`}>{fmtDate(c.ise_giris)}</td>
+                      <td className={`${styles.td} ${styles.colEnd} ${styles.tdDate}`}>{fmtDate(c.isten_cikis)}</td>
+                      <td className={`${styles.td} ${styles.colTotal} ${styles.tdTotal} font-semibold text-gray-900 dark:text-gray-100`}>
                         {c.net_toplam != null ? fmt.format(Number(c.net_toplam)) : "-"}
                       </td>
 
-                      <td className="px-2 py-2 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className={`${styles.td} ${styles.colActions}`}>
+                        <div className={styles.actions}>
                           <Button type="button" variant="outline" size="icon"
-                            className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
+                            className="h-7 w-7 flex-shrink-0 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
                             onClick={e => { e.stopPropagation(); navigate(`${route}/${c.id}`); }} title="Düzenle">
                             <Edit className="h-3 w-3" />
                           </Button>
                           <Button type="button" variant="outline" size="icon"
-                            className="h-7 w-7 text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+                            className="h-7 w-7 flex-shrink-0 text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
                             onClick={e => { e.stopPropagation(); handleCopy(c); }}
                             disabled={copyingId === c.id} title="Kopyala">
                             <Copy className="h-3 w-3" />
                           </Button>
                           <Button type="button" variant="outline" size="icon"
-                            className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                            className="h-7 w-7 flex-shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
                             onClick={e => { e.stopPropagation(); handleDelete(c.id); }} title="Sil">
                             <Trash2 className="h-3 w-3" />
                           </Button>

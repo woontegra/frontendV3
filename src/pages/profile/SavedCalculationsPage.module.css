@@ -1,0 +1,182 @@
+.tableWrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.6875rem;
+}
+
+@media (min-width: 640px) {
+  .table {
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .table {
+    table-layout: fixed;
+  }
+}
+
+@media (max-width: 767px) {
+  .table {
+    width: auto;
+    min-width: 760px;
+    table-layout: auto;
+  }
+}
+
+.thead {
+  background: rgb(249 250 251);
+}
+
+:global(html.dark) .thead {
+  background: rgba(17, 24, 39, 0.9);
+}
+
+.th,
+.td {
+  padding: 0.5rem;
+  vertical-align: middle;
+}
+
+.th {
+  font-weight: 500;
+  text-transform: uppercase;
+  color: rgb(107 114 128);
+  white-space: nowrap;
+}
+
+:global(html.dark) .th {
+  color: rgb(209 213 219);
+}
+
+.td {
+  color: rgb(107 114 128);
+}
+
+:global(html.dark) .td {
+  color: rgb(156 163 175);
+}
+
+.colCheck {
+  width: 2rem;
+  text-align: center;
+}
+
+.colIndex {
+  width: 1.5rem;
+}
+
+.colName {
+  text-align: left;
+}
+
+.colDate,
+.colStart,
+.colEnd {
+  text-align: left;
+}
+
+.colTotal {
+  text-align: left;
+}
+
+.colActions {
+  text-align: right;
+}
+
+@media (min-width: 768px) {
+  .colName {
+    width: 26%;
+  }
+
+  .colDate,
+  .colStart,
+  .colEnd {
+    width: 12%;
+  }
+
+  .colTotal {
+    width: 13%;
+  }
+
+  .colActions {
+    width: 7.5rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .colName {
+    min-width: 10rem;
+  }
+
+  .colDate,
+  .colStart,
+  .colEnd {
+    min-width: 5.5rem;
+  }
+
+  .colTotal {
+    min-width: 6.5rem;
+  }
+
+  .colActions {
+    min-width: 7.5rem;
+  }
+
+  .tdName,
+  .tdDate,
+  .tdTotal {
+    white-space: nowrap;
+  }
+}
+
+.tbody {
+  background: #fff;
+}
+
+:global(html.dark) .tbody {
+  background: rgb(31 41 55);
+}
+
+.row:hover {
+  background: rgb(249 250 251);
+}
+
+:global(html.dark) .row:hover {
+  background: rgb(55 65 81);
+}
+
+.rowSelected {
+  background: rgb(239 246 255);
+}
+
+:global(html.dark) .rowSelected {
+  background: rgba(30, 58, 138, 0.2);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.toolbarSpacer {
+  flex: 1 1 auto;
+}
