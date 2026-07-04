@@ -903,6 +903,17 @@ export default function UbgtBilirkisiPage() {
       .map((r) => `${r.start} → ${r.end}`)
       .join("; ");
 
+    const hakkaniyetSonrasi = Math.max(0, ubgtNetSummary.brut - ubgtNetSummary.hakkaniyet);
+    const mahsuplasmaMiktari =
+      parseFloat(
+        String(ubgtNetSummary.settleAmount || "")
+          .replace(/\./g, "")
+          .replace(/,/g, ".")
+          .replace(/₺/g, "")
+          .trim(),
+      ) || 0;
+    const mahsuplasmaSonucu = Math.max(0, hakkaniyetSonrasi - mahsuplasmaMiktari);
+
     return {
       title: "Bilirkişi UBGT Alacağı",
       sections: { info: true, periodTable: true, grossToNet: true, mahsuplasma: true },
@@ -953,12 +964,17 @@ export default function UbgtBilirkisiPage() {
       mahsuplasmaData: {
         title: "Mahsuplaşma",
         rows: [
-          { label: "Net UBGT alacağı", value: `${fmt(ubgtNetSummary.net)}₺` },
+          { label: "Brüt UBGT alacağı", value: `${fmt(ubgtNetSummary.brut)}₺` },
           { label: "1/3 hakkaniyet indirimi", value: `-${fmt(ubgtNetSummary.hakkaniyet)}₺`, isDeduction: true },
+          {
+            label: "Mahsuplaşma miktarı",
+            value: mahsuplasmaMiktari > 0 ? `-${fmt(mahsuplasmaMiktari)}₺` : `${fmt(0)}₺`,
+            isDeduction: mahsuplasmaMiktari > 0,
+          },
         ],
         netRow: {
           label: "Mahsuplaşma sonucu",
-          value: `${fmt(Math.max(0, ubgtNetSummary.net - ubgtNetSummary.hakkaniyet))}₺`,
+          value: `${fmt(mahsuplasmaSonucu)}₺`,
         },
       },
     };
