@@ -182,12 +182,14 @@ export default function AdminEmailNotifications() {
       name: "Barolara Özel Teklif",
       templateId: "baro",
       recipientType: "bar_associations",
-      subject: "Baro Üyelerinize Özel Bilirkişi Hesaplama Programı Teklifi",
+      subject: "{{baro_adi}} Üyelerine Özel %40 İndirim Protokolü",
       message: `Sayın {{baro_adi}},
 
 Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti. olarak, avukatların işçilik alacakları hesaplamalarını daha hızlı, düzenli ve pratik şekilde yapabilmeleri için geliştirdiğimiz Bilirkişi Hesaplama Programı’nı baro üyelerinize özel avantajlı koşullarla sunmak isteriz.
 
-Bu kapsamda {{baro_adi}} üyelerine özel %{{indirim_orani}} indirim tanımlanmıştır.
+Bu kapsamda, {{baro_adi}} üyelerine özel %{{indirim_orani}} indirimli kullanım avantajı sağlanmasına ilişkin iş birliği ve üye avantaj protokolü taslağını bilginize sunmak isteriz.
+
+Protokolün baronuz tarafından uygun bulunarak imzalanması ve Woontegra'ya iletilmesi halinde, protokol hükümleri doğrultusunda en geç 3 gün içinde {{baro_adi}} üyelerine özel indirimli başvuru bağlantısı oluşturularak tarafınıza iletilecektir.
 
 Üyeleriniz aşağıdaki bağlantı üzerinden özel teklif sayfasına ulaşabilir:
 {{teklif_linki}}
@@ -197,8 +199,6 @@ Sözleşme/protokol önizleme bağlantısı:
 
 Sözleşme indirme bağlantısı:
 {{sozlesme_indirme_linki}}
-
-Dilerseniz iş birliği ve üye avantaj protokolü taslağını da tarafınıza iletebiliriz.
 
 Saygılarımızla,
 Woontegra Teknoloji Yazılım ve Dijital Hizmetler Ltd. Şti.
