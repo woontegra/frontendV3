@@ -4,6 +4,13 @@ import { API_BASE_URL } from "@/utils/apiClient";
 
 const MAIN_SITE_URL = "https://bilirkisihesap.com";
 const LOGO_URL = "https://panel.bilirkisihesap.com/logo.png";
+const PRODUCTION_API_URL = "https://api.bilirkisihesap.com";
+
+function resolveUnsubscribeApiOrigin() {
+  if (API_BASE_URL) return API_BASE_URL.replace(/\/$/, "");
+  if (import.meta.env.DEV) return "";
+  return PRODUCTION_API_URL;
+}
 
 export default function UnsubscribePage() {
   const [searchParams] = useSearchParams();
@@ -17,8 +24,9 @@ export default function UnsubscribePage() {
       setMessage("Geçersiz link. Abonelikten çıkış için maildeki linki kullanın.");
       return;
     }
-    const url = `${API_BASE_URL || ""}/api/email-notifications/unsubscribe?token=${encodeURIComponent(token)}`;
-    fetch(url)
+    const apiOrigin = resolveUnsubscribeApiOrigin();
+    const url = `${apiOrigin}/api/email-notifications/unsubscribe?token=${encodeURIComponent(token)}&format=json`;
+    fetch(url, { headers: { Accept: "application/json" } })
       .then((res) => res.json().then((data) => ({ res, data })))
       .then(({ res, data }) => {
         if (data.success) {
@@ -27,11 +35,7 @@ export default function UnsubscribePage() {
         } else {
           setStatus("error");
           const raw = data?.error || data?.message || "";
-          const isTenantOrGeneric =
-            !res.ok || raw === "TENANT_HEADER_MISSING" || raw.includes("Tenant") || raw.includes("tenant");
-          setMessage(
-            isTenantOrGeneric ? "Abonelikten çıkış işlemi sırasında bir sorun oluştu." : raw || "İşlem yapılamadı.",
-          );
+          setMessage(raw || "İşlem yapılamadı.");
         }
       })
       .catch(() => {
