@@ -1,18 +1,18 @@
 /**
  * Yeraltı İşçileri — UBGT / yıllık izin düşüm satırı köprüsü.
- * Tarih: deductionPeriodEngine. FM/tutar: sayfa veya isteğe bağlı yeraltı FM yardımcısı.
+ * Düşüm günleri 7 günlük pencerelere yerleştirilir; her pencere 1 hafta düşüme karşılık gelir.
+ * FM/tutar: yeraltı formülü (187,5 / 2 / 37,5).
  */
 
 import { addDays } from "date-fns";
 import type { ExcludedDay } from "@/utils/exclusionStorage";
 import { getAsgariUcretByDate } from "@modules/fazla-mesai/shared";
 import {
-  buildDeductionPeriodsForFm,
+  normalizeDeductionDays,
   parseFmDate,
-  type FmPeriodSegment,
+  type NormalizedDeductionOnDate,
 } from "@/shared/utils/fazlaMesai/deductionPeriodEngine";
 import { filterExclusionsForWeeklyOff } from "@/shared/utils/fazlaMesai/weeklyOffExclusionFilter";
-import { splitByExclusions } from "@/modules/tanikli-standart/rules/splitByExclusions.rule";
 import { countWeeksBySevenDaySteps } from "@/modules/tanikli-standart/rules/preserveWeeks.rule";
 import type { YeraltiExpandSourceRow } from "./yeraltiAnnualLeaveUbgtExpand";
 import { expandYeraltiRowsForExclusions } from "./yeraltiAnnualLeaveUbgtExpand";
@@ -87,29 +87,6 @@ function yeraltiFmHoursForDeductionWeek(
   return fmWeek;
 }
 
-/** "(1 gün UBGT + 1 gün yıllık izin düşülmüştür)" → 2 (tüm "N gün" ifadeleri toplanır). */
-function parseExcludedUnitsFromCaption(caption: string | undefined): number | null {
-  if (!caption) return null;
-  const re = /([\d]+(?:[.,]5)?)\s*gün/gi;
-  let total = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(caption)) !== null) {
-    const n = parseFloat(m[1].replace(",", "."));
-    if (Number.isFinite(n) && n > 0) total += n;
-  }
-  return total > EPS ? total : null;
-}
-
-/**
- * FM için düşüm gün birimi: motor `segment.deductions` dayWeight toplamı esas alınır.
- * (UBGT + yıllık izin aynı 7 günlük pencerede → 1+1=2; aynı tarihte çift UBGT max 1.)
- */
-function resolveExcludedUnitsForDeductionSegment(segment: FmPeriodSegment): number {
-  const fromDeductions = sumDeductionDayUnits(segment);
-  if (fromDeductions > EPS) return fromDeductions;
-  return parseExcludedUnitsFromCaption(segment.caption) ?? 0;
-}
-
 function yeraltiFmNet(weeks: number, brut: number, kats: number, fmHours: number): { fm: number; net: number } {
   const step1 = Number((weeks * brut * kats * fmHours).toFixed(6));
   const step2 = Number((step1 / FAZLA_MESAI_DENOMINATOR).toFixed(6));
@@ -143,6 +120,71 @@ function countWorkDaysInInclusiveRange(start: Date, end: Date, weeklyOff: number
   return n;
 }
 
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatDayUnits(n: number): string {
+  if (Math.abs(n - 0.5) < 1e-6) return "0,5";
+  if (Math.abs(n - Math.round(n)) < 1e-6) return String(Math.round(n));
+  return String(n).replace(".", ",");
+}
+
+function formatWindowCaption(deductions: NormalizedDeductionOnDate[]): string {
+  if (deductions.length === 0) return "";
+  const ubgtUnits = deductions.filter((d) => d.kind === "UBGT").reduce((s, d) => s + d.dayWeight, 0);
+  const izinUnits = deductions.filter((d) => d.kind === "YILLIK_IZIN").reduce((s, d) => s + d.dayWeight, 0);
+  const parts: string[] = [];
+  if (ubgtUnits > 0) parts.push(`${formatDayUnits(ubgtUnits)} gün UBGT`);
+  if (izinUnits > 0) parts.push(`${formatDayUnits(izinUnits)} gün yıllık izin`);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return `(${parts[0]} düşülmüştür)`;
+  return `(${parts.join(" + ")} düşülmüştür)`;
+}
+
+interface DeductionWindow {
+  startISO: string;
+  endISO: string;
+  deductions: NormalizedDeductionOnDate[];
+  totalDeductionDayUnits: number;
+  caption: string;
+}
+
+/** Düşüm günlerini 7 günlük pencerelere böler; bitişik pencereler birleştirilmez. */
+function buildSevenDayWindows(
+  normalizedDays: NormalizedDeductionOnDate[],
+  periodEnd: Date,
+): DeductionWindow[] {
+  if (normalizedDays.length === 0) return [];
+  const sorted = [...normalizedDays].sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+  const windows: DeductionWindow[] = [];
+  let i = 0;
+  while (i < sorted.length) {
+    const firstDay = parseFmDate(sorted[i].dateISO);
+    if (!firstDay) { i++; continue; }
+    const windowEnd = addDays(firstDay, 6);
+    const group: NormalizedDeductionOnDate[] = [];
+    while (i < sorted.length) {
+      const d = parseFmDate(sorted[i].dateISO);
+      if (!d || d > windowEnd) break;
+      group.push(sorted[i]);
+      i++;
+    }
+    const clippedEnd = windowEnd > periodEnd ? periodEnd : windowEnd;
+    windows.push({
+      startISO: toISODate(firstDay),
+      endISO: toISODate(clippedEnd),
+      deductions: group,
+      totalDeductionDayUnits: group.reduce((s, d) => s + d.dayWeight, 0),
+      caption: formatWindowCaption(group),
+    });
+  }
+  return windows;
+}
+
 function enrichRowsWithoutDeductions(
   rows: YeraltiExpandSourceRow[],
   weeklyOffDay: number | null,
@@ -166,10 +208,6 @@ function enrichRowsWithoutDeductions(
       prePreserveWeeks: Wpre,
     } as YeraltiExpandSourceRow;
   });
-}
-
-function sumDeductionDayUnits(segment: FmPeriodSegment): number {
-  return segment.deductions.reduce((s, d) => s + d.dayWeight, 0);
 }
 
 function buildCombinedNormalRow(
@@ -213,20 +251,20 @@ function buildCombinedNormalRow(
   };
 }
 
-function mapDeductionSegmentToRow(
-  segment: FmPeriodSegment,
+function mapWindowToRow(
+  win: DeductionWindow,
   sourceRow: YeraltiExpandSourceRow,
   rowIdx: number,
-  segIdx: number,
+  winIdx: number,
   weeklyOffDay: number | null,
   fmParams: YeraltiExpandFmParams | undefined,
 ): YeraltiExpandSourceRow {
-  const b0 = parseIsoDateLocal(segment.startISO);
-  const b1 = parseIsoDateLocal(segment.endISO);
+  const b0 = parseIsoDateLocal(win.startISO);
+  const b1 = parseIsoDateLocal(win.endISO);
   const seg =
     b0 && b1 && b0 <= b1 ? countWorkDaysInInclusiveRange(b0, b1, weeklyOffDay) : 0;
-  const excludedDays = resolveExcludedUnitsForDeductionSegment(segment);
-  const brut = getAsgariUcretByDate(segment.startISO) ?? sourceRow.brut;
+  const excludedDays = win.totalDeductionDayUnits;
+  const brut = getAsgariUcretByDate(win.startISO) ?? sourceRow.brut;
   const kats = sourceRow.katsayi ?? 1;
 
   let fmHours = sourceRow.fmHours ?? 0;
@@ -238,10 +276,10 @@ function mapDeductionSegmentToRow(
 
   return {
     ...sourceRow,
-    id: `yr-ded-${rowIdx}-${segIdx}-${segment.startISO}-${segment.endISO}`,
-    startISO: segment.startISO,
-    endISO: segment.endISO,
-    rangeLabel: `${segment.startISO} – ${segment.endISO}`,
+    id: `yr-ded-${rowIdx}-${winIdx}-${win.startISO}-${win.endISO}`,
+    startISO: win.startISO,
+    endISO: win.endISO,
+    rangeLabel: `${win.startISO} – ${win.endISO}`,
     weeks: 1,
     originalWeekCount: 1,
     brut,
@@ -252,7 +290,7 @@ function mapDeductionSegmentToRow(
     segmentWorkDays: seg,
     excludedDays,
     totalDays: seg,
-    yillikIzinAciklama: segment.caption || undefined,
+    yillikIzinAciklama: win.caption || undefined,
     isExclusionBlock: true,
     prePreserveWeeks: 1,
   } as YeraltiExpandSourceRow;
@@ -260,11 +298,12 @@ function mapDeductionSegmentToRow(
 
 function expandWithMotor(
   rows: YeraltiExpandSourceRow[],
-  exclusions: ExcludedDay[],
+  exclusionsForMotor: ExcludedDay[],
   weeklyOffDay: number | null,
   fmParams: YeraltiExpandFmParams | undefined,
 ): YeraltiExpandSourceRow[] {
   const out: YeraltiExpandSourceRow[] = [];
+  const allNormalized = normalizeDeductionDays(exclusionsForMotor);
 
   rows.forEach((row, rowIdx) => {
     if (row.isManual) {
@@ -279,20 +318,31 @@ function expandWithMotor(
       return;
     }
 
-    const periodResult = buildDeductionPeriodsForFm({
-      periodStart: startISO,
-      periodEnd: endISO,
-      exclusions,
+    const periodStart = parseIsoDateLocal(startISO);
+    const periodEnd = parseIsoDateLocal(endISO);
+    if (!periodStart || !periodEnd || periodEnd < periodStart) {
+      out.push(...enrichRowsWithoutDeductions([row], weeklyOffDay));
+      return;
+    }
+
+    const daysInPeriod = allNormalized.filter((d) => {
+      const dd = parseFmDate(d.dateISO);
+      return dd && dd >= periodStart && dd <= periodEnd;
     });
 
-    const deductionSegments = periodResult.segments.filter((s) => s.containsDeduction);
-    if (deductionSegments.length === 0) {
+    if (daysInPeriod.length === 0) {
+      out.push(...enrichRowsWithoutDeductions([row], weeklyOffDay));
+      return;
+    }
+
+    const windows = buildSevenDayWindows(daysInPeriod, periodEnd);
+    if (windows.length === 0) {
       out.push(...enrichRowsWithoutDeductions([row], weeklyOffDay));
       return;
     }
 
     const originalWeeks = Math.max(0, Math.floor(Number(row.originalWeekCount ?? w0) || 0));
-    const deductionWeekCount = deductionSegments.length;
+    const deductionWeekCount = windows.length;
     const baseWeeks = Math.max(0, originalWeeks - deductionWeekCount);
 
     if (baseWeeks > 0) {
@@ -301,29 +351,20 @@ function expandWithMotor(
       );
     }
 
-    deductionSegments
-      .sort((a, b) => a.startISO.localeCompare(b.startISO))
-      .forEach((segment, segIdx) => {
-        const dedRow = mapDeductionSegmentToRow(
-          segment,
-          row,
-          rowIdx,
-          segIdx,
-          weeklyOffDay,
-          fmParams,
-        );
-        if (fmParams && dedRow.fmHours <= EPS) {
-          return;
-        }
-        out.push(dedRow);
-      });
+    windows.forEach((win, winIdx) => {
+      const dedRow = mapWindowToRow(win, row, rowIdx, winIdx, weeklyOffDay, fmParams);
+      if (fmParams && dedRow.fmHours <= EPS) {
+        return;
+      }
+      out.push(dedRow);
+    });
   });
 
   return out.length > 0 ? out : rows;
 }
 
 /**
- * UBGT/yıllık izin: ortak motor + birleşik normal satır.
+ * UBGT/yıllık izin: 7 günlük pencere bazlı düşüm (bitişik pencereler birleştirilmez).
  * Rapor/Diğer/Puantaj/Bordro: eski expandYeraltiRowsForExclusions.
  */
 export function expandYeraltiRowsForDeductions(

@@ -1,13 +1,16 @@
 /**
  * Gemi Adamı 7/24 Çalışan — UBGT / yıllık izin düşüm satırı köprüsü.
- * Tarih: deductionPeriodEngine. FM: 7×24 formülü (91 net, gün başı 13 saat, 48+8 düşüm).
+ * Düşüm günleri 7 günlük pencerelere yerleştirilir; her pencere 1 hafta düşüme karşılık gelir.
+ * FM: 7×24 formülü (91 net, gün başı 13 saat, 48+8 düşüm).
  */
 
+import { addDays } from "date-fns";
 import type { ExcludedDay } from "@/utils/exclusionStorage";
 import { getAsgariUcretByDate } from "@modules/fazla-mesai/shared";
 import {
-  buildDeductionPeriodsForFm,
-  type FmPeriodSegment,
+  normalizeDeductionDays,
+  parseFmDate,
+  type NormalizedDeductionOnDate,
 } from "@/shared/utils/fazlaMesai/deductionPeriodEngine";
 import { DAMGA_VERGISI_ORANI, GELIR_VERGISI_ORANI } from "@/utils/fazlaMesai/tableDisplayPipeline";
 import type { GemiExpandSourceRow } from "../gemi-adami-gunluk/gemiAnnualLeaveUbgtExpand";
@@ -36,28 +39,6 @@ function gemi724FmHoursForDeduction(excludedUnits: number): number {
   return Math.max(0, weeklyNet - GEMI_724_LEGAL_WEEKLY_LIMIT - GEMI_724_WEEKLY_LEAVE_HOURS);
 }
 
-function parseExcludedUnitsFromCaption(caption: string | undefined): number | null {
-  if (!caption) return null;
-  const re = /([\d]+(?:[.,]5)?)\s*gün/gi;
-  let total = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(caption)) !== null) {
-    const n = parseFloat(m[1].replace(",", "."));
-    if (Number.isFinite(n) && n > 0) total += n;
-  }
-  return total > EPS ? total : null;
-}
-
-function sumDeductionDayUnits(segment: FmPeriodSegment): number {
-  return segment.deductions.reduce((s, d) => s + d.dayWeight, 0);
-}
-
-function resolveExcludedUnitsForDeductionSegment(segment: FmPeriodSegment): number {
-  const fromDeductions = sumDeductionDayUnits(segment);
-  if (fromDeductions > EPS) return fromDeductions;
-  return parseExcludedUnitsFromCaption(segment.caption) ?? 0;
-}
-
 function gemi724FmNet(weeks: number, brut: number, kats: number, fmHours: number): { fm: number; net: number } {
   const step1 = Number((weeks * brut * kats * fmHours).toFixed(6));
   const step2 = Number((step1 / FAZLA_MESAI_DENOMINATOR).toFixed(6));
@@ -70,6 +51,71 @@ function gemi724FmNet(weeks: number, brut: number, kats: number, fmHours: number
 export function exclusionsNeedLegacySplit(exclusions: ExcludedDay[]): boolean {
   if (!exclusions?.length) return false;
   return exclusions.some((ex) => LEGACY_ONLY_EXCLUSION_TYPES.has(String(ex.type || "").trim()));
+}
+
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatDayUnits(n: number): string {
+  if (Math.abs(n - 0.5) < 1e-6) return "0,5";
+  if (Math.abs(n - Math.round(n)) < 1e-6) return String(Math.round(n));
+  return String(n).replace(".", ",");
+}
+
+function formatWindowCaption(deductions: NormalizedDeductionOnDate[]): string {
+  if (deductions.length === 0) return "";
+  const ubgtUnits = deductions.filter((d) => d.kind === "UBGT").reduce((s, d) => s + d.dayWeight, 0);
+  const izinUnits = deductions.filter((d) => d.kind === "YILLIK_IZIN").reduce((s, d) => s + d.dayWeight, 0);
+  const parts: string[] = [];
+  if (ubgtUnits > 0) parts.push(`${formatDayUnits(ubgtUnits)} gün UBGT`);
+  if (izinUnits > 0) parts.push(`${formatDayUnits(izinUnits)} gün yıllık izin`);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return `(${parts[0]} düşülmüştür)`;
+  return `(${parts.join(" + ")} düşülmüştür)`;
+}
+
+interface DeductionWindow {
+  startISO: string;
+  endISO: string;
+  deductions: NormalizedDeductionOnDate[];
+  totalDeductionDayUnits: number;
+  caption: string;
+}
+
+/** Düşüm günlerini 7 günlük pencerelere böler; bitişik pencereler birleştirilmez. */
+function buildSevenDayWindows(
+  normalizedDays: NormalizedDeductionOnDate[],
+  periodEnd: Date,
+): DeductionWindow[] {
+  if (normalizedDays.length === 0) return [];
+  const sorted = [...normalizedDays].sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+  const windows: DeductionWindow[] = [];
+  let i = 0;
+  while (i < sorted.length) {
+    const firstDay = parseFmDate(sorted[i].dateISO);
+    if (!firstDay) { i++; continue; }
+    const windowEnd = addDays(firstDay, 6);
+    const group: NormalizedDeductionOnDate[] = [];
+    while (i < sorted.length) {
+      const d = parseFmDate(sorted[i].dateISO);
+      if (!d || d > windowEnd) break;
+      group.push(sorted[i]);
+      i++;
+    }
+    const clippedEnd = windowEnd > periodEnd ? periodEnd : windowEnd;
+    windows.push({
+      startISO: toISODate(firstDay),
+      endISO: toISODate(clippedEnd),
+      deductions: group,
+      totalDeductionDayUnits: group.reduce((s, d) => s + d.dayWeight, 0),
+      caption: formatWindowCaption(group),
+    });
+  }
+  return windows;
 }
 
 function enrichRowsWithoutDeductions(rows: GemiExpandSourceRow[]): GemiExpandSourceRow[] {
@@ -105,24 +151,24 @@ function buildCombinedNormalRow(
   };
 }
 
-function mapDeductionSegmentToRow(
-  segment: FmPeriodSegment,
+function mapWindowToRow(
+  win: DeductionWindow,
   sourceRow: GemiExpandSourceRow,
   rowIdx: number,
-  segIdx: number,
+  winIdx: number,
 ): GemiExpandSourceRow {
-  const excludedDays = resolveExcludedUnitsForDeductionSegment(segment);
-  const brut = getAsgariUcretByDate(segment.startISO) ?? sourceRow.brut;
+  const excludedDays = win.totalDeductionDayUnits;
+  const brut = getAsgariUcretByDate(win.startISO) ?? sourceRow.brut;
   const kats = sourceRow.katsayi ?? 1;
   const fmHours = excludedDays > EPS ? gemi724FmHoursForDeduction(excludedDays) : sourceRow.fmHours ?? 0;
   const { fm, net } = gemi724FmNet(1, brut, kats, fmHours);
 
   return {
     ...sourceRow,
-    id: `gemi724-ded-${rowIdx}-${segIdx}-${segment.startISO}-${segment.endISO}`,
-    startISO: segment.startISO,
-    endISO: segment.endISO,
-    rangeLabel: `${segment.startISO} – ${segment.endISO}`,
+    id: `gemi724-ded-${rowIdx}-${winIdx}-${win.startISO}-${win.endISO}`,
+    startISO: win.startISO,
+    endISO: win.endISO,
+    rangeLabel: `${win.startISO} – ${win.endISO}`,
     weeks: 1,
     brut,
     katsayi: kats,
@@ -131,7 +177,7 @@ function mapDeductionSegmentToRow(
     net,
     calc225: 240,
     factor: 1.25,
-    yillikIzinAciklama: segment.caption || undefined,
+    yillikIzinAciklama: win.caption || undefined,
   };
 }
 
@@ -140,6 +186,7 @@ function expandWithMotor(
   exclusions: ExcludedDay[],
 ): GemiExpandSourceRow[] {
   const out: GemiExpandSourceRow[] = [];
+  const allNormalized = normalizeDeductionDays(exclusions);
 
   rows.forEach((row, rowIdx) => {
     if (row.isManual) {
@@ -154,42 +201,51 @@ function expandWithMotor(
       return;
     }
 
-    const periodResult = buildDeductionPeriodsForFm({
-      periodStart: startISO,
-      periodEnd: endISO,
-      exclusions,
+    const periodStart = parseFmDate(startISO);
+    const periodEnd = parseFmDate(endISO);
+    if (!periodStart || !periodEnd || periodEnd < periodStart) {
+      out.push(...enrichRowsWithoutDeductions([row]));
+      return;
+    }
+
+    const daysInPeriod = allNormalized.filter((d) => {
+      const dd = parseFmDate(d.dateISO);
+      return dd && dd >= periodStart && dd <= periodEnd;
     });
 
-    const deductionSegments = periodResult.segments.filter((s) => s.containsDeduction);
-    if (deductionSegments.length === 0) {
+    if (daysInPeriod.length === 0) {
+      out.push(...enrichRowsWithoutDeductions([row]));
+      return;
+    }
+
+    const windows = buildSevenDayWindows(daysInPeriod, periodEnd);
+    if (windows.length === 0) {
       out.push(...enrichRowsWithoutDeductions([row]));
       return;
     }
 
     const originalWeeks = Math.max(0, Math.floor(Number(row.weeks) || 0));
-    const deductionWeekCount = deductionSegments.length;
+    const deductionWeekCount = windows.length;
     const baseWeeks = Math.max(0, originalWeeks - deductionWeekCount);
 
     if (baseWeeks > 0) {
       out.push(buildCombinedNormalRow(row, rowIdx, startISO, endISO, baseWeeks));
     }
 
-    deductionSegments
-      .sort((a, b) => a.startISO.localeCompare(b.startISO))
-      .forEach((segment, segIdx) => {
-        const dedRow = mapDeductionSegmentToRow(segment, row, rowIdx, segIdx);
-        if (dedRow.fmHours <= EPS) {
-          return;
-        }
-        out.push(dedRow);
-      });
+    windows.forEach((win, winIdx) => {
+      const dedRow = mapWindowToRow(win, row, rowIdx, winIdx);
+      if (dedRow.fmHours <= EPS) {
+        return;
+      }
+      out.push(dedRow);
+    });
   });
 
   return out.length > 0 ? out : rows;
 }
 
 /**
- * UBGT/yıllık izin: ortak motor + birleşik normal satır (7/24 FM formülü).
+ * UBGT/yıllık izin: 7 günlük pencere bazlı düşüm (bitişik pencereler birleştirilmez).
  * Rapor/Diğer/Puantaj/Bordro: eski expandGemiRowsAnnualLeaveUbgt (hg=7).
  */
 export function expandGemi724RowsForDeductions(

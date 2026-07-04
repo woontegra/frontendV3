@@ -35,6 +35,11 @@ import { calculateIncomeTaxWithBrackets } from "@/utils/incomeTaxCore";
 import { calculate48System } from "../../../utils/fazlaMesai/vardiya24/calculate48System";
 import { isV48TransitionMotorNote } from "../../../utils/fazlaMesai/vardiya24/vardiya48TransitionNotes";
 import {
+  expandVardiya48RowsForDeductions,
+  exclusionsNeedLegacySplit,
+  partitionVardiya48Exclusions,
+} from "./expandVardiya48RowsForDeductions";
+import {
   applyResolvedManualBrutToRows,
   clearAllManualBrutFromRowOverrides,
   mergeManualWageBrutsIntoRowOverrides,
@@ -334,16 +339,12 @@ export default function Vardiya48Page() {
   const { iseGiris, istenCikis, taniklar, katSayi, mahsuplasmaMiktari } = formValues;
   const zamanasimiBaslangic = formValues.zamanasimi?.nihaiBaslangic || null;
 
-  const exclusionsFor48 = useMemo(
-    () =>
-      Array.isArray(exclusions)
-        ? (exclusions as ExcludedDay[]).filter((e) => {
-            const t = String(e.type || "").trim();
-            return t !== "UBGT" && t !== "Yıllık İzin";
-          })
-        : [],
+  const { motor: motorExclusions48, legacy: legacyExclusions48 } = useMemo(
+    () => partitionVardiya48Exclusions(exclusions as ExcludedDay[]),
     [exclusions],
   );
+  /** Rapor/Diğer/Puantaj vb. — calculate48System legacy yolu. */
+  const exclusionsFor48 = legacyExclusions48;
 
   const pageTitle = PAGE_TITLE;
   const recordType = RECORD_TYPE;
@@ -488,18 +489,61 @@ export default function Vardiya48Page() {
         witnessIntervals48 = [{ start: dStart, end: dEnd }];
       }
       const zNorm48 = zamanasimiBaslangic ? normalizeDateInput(zamanasimiBaslangic) : null;
+      const useLegacyDeductionPath48 = exclusionsNeedLegacySplit(exclusions as ExcludedDay[]);
       const summaryRows48 = witnessIntervals48.flatMap((seg) => {
         const segAnchor = anchorForSegment(dStart, seg.start, anchorIsWorkDay);
-        return calculate48System({
+        const calcExclusions = useLegacyDeductionPath48
+          ? (exclusions as ExcludedDay[])
+          : legacyExclusions48;
+        const baselineSummary = calculate48System({
           witnessSegments: [{ start: seg.start, end: seg.end }],
           anchorStartDate: dStart,
           weekBucketAnchorDate: dStart,
           anchorIsWorkDay: segAnchor,
-          exclusions: exclusionsFor48 as ExcludedDay[],
+          exclusions: calcExclusions,
           zNorm: zNorm48,
           davaStart: seg.start,
           davaEnd: seg.end,
         });
+
+        if (useLegacyDeductionPath48 || motorExclusions48.length === 0) {
+          return baselineSummary;
+        }
+
+        const segId = `v48-${seg.start}-${seg.end}`;
+        const segRows = baselineSummary.map((w, idx) => ({
+          id: `${segId}-${idx}-${w.startDate}`,
+          isManual: false,
+          rangeLabel: `${formatDateTR(w.startDate)}–${formatDateTR(w.endDate)}`,
+          weeks: w.weekCount,
+          brut: getAsgariUcretByDate(w.startDate) || 0,
+          katsayi: katSayi || 1,
+          fmHours: w.weeklyFmHours,
+          calc225: 225,
+          factor: 1.5,
+          fm: 0,
+          net: 0,
+          startISO: w.startDate,
+          endISO: w.endDate,
+          weekTypeLabel: `${w.weekType} gün`,
+          yillikIzinAciklama: w.note,
+        }));
+
+        const expandedRows = expandVardiya48RowsForDeductions(segRows, motorExclusions48, {
+          anchorStartDate: dStart,
+          anchorIsWorkDay: segAnchor,
+          segmentStart: seg.start,
+          segmentEnd: seg.end,
+        });
+
+        return expandedRows.map((r) => ({
+          startDate: r.startISO,
+          endDate: r.endISO,
+          weekType: String(parseInt(String(r.weekTypeLabel || "").split(" ")[0] || "0", 10) || 0),
+          weekCount: r.weeks,
+          weeklyFmHours: r.fmHours,
+          note: r.yillikIzinAciklama,
+        }));
       });
       logVardiyaDebug("summaryRowsRaw.48", summaryRows48);
       logVardiyaDebug("summaryRowsRaw.48.compact", summarizeCalcRows(summaryRows48));
@@ -561,7 +605,7 @@ export default function Vardiya48Page() {
           const currentWeeks = idxs.reduce((acc, i) => acc + Math.max(0, Math.round(Number(nextRows[i].weeks) || 0)), 0);
           let deltaWeeks = expectedRoundedWeeks - currentWeeks;
           if (deltaWeeks === 0) return;
-          if (exclusionsFor48.length > 0 && deltaWeeks > 0) return;
+          if ((exclusionsFor48.length > 0 || motorExclusions48.length > 0) && deltaWeeks > 0) return;
 
           while (deltaWeeks > 0) {
             let targetIdx = idxs[0];
@@ -606,7 +650,7 @@ export default function Vardiya48Page() {
     } finally {
       if (rid === reqIdRef.current) setIsCalculating(false);
     }
-  }, [iseGiris, istenCikis, taniklar, anchorIsWorkDay, exclusionsFor48, katSayi, zamanasimiBaslangic]);
+  }, [iseGiris, istenCikis, taniklar, anchorIsWorkDay, exclusions, legacyExclusions48, motorExclusions48, katSayi, zamanasimiBaslangic]);
 
   useEffect(() => {
     const t = setTimeout(() => {

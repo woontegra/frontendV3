@@ -1,13 +1,15 @@
 /**
  * 24 Saat Vardiya — UBGT / yıllık izin düşüm satırı köprüsü.
- * Tarih: deductionPeriodEngine.
+ * Düşüm günleri 7 günlük pencerelere yerleştirilir; her pencere 1 düşüm bloğu sayılır.
  * Düşüm FM: kalan çalışma günü × 3 (4→12, 3→9; 1 gün düşüm 4'lük haftada → 9 saat).
  */
 
+import { addDays } from "date-fns";
 import type { ExcludedDay } from "@/utils/exclusionStorage";
 import {
-  buildDeductionPeriodsForFm,
-  type FmPeriodSegment,
+  normalizeDeductionDays,
+  parseFmDate,
+  type NormalizedDeductionOnDate,
 } from "@/shared/utils/fazlaMesai/deductionPeriodEngine";
 import { getAsgariUcretByDate } from "@modules/fazla-mesai/shared";
 import { generateWorkDays24 } from "../../../utils/fazlaMesai/vardiya24/generateWorkDays24";
@@ -51,6 +53,14 @@ const MOTOR_EXCLUSION_TYPES = new Set(["UBGT", "Yıllık İzin"]);
 
 const EPS = 1e-7;
 
+export interface DeductionWindow {
+  startISO: string;
+  endISO: string;
+  deductions: NormalizedDeductionOnDate[];
+  totalDeductionDayUnits: number;
+  caption: string;
+}
+
 export function exclusionsNeedLegacySplit(exclusions: ExcludedDay[]): boolean {
   if (!exclusions?.length) return false;
   return exclusions.some((ex) => LEGACY_ONLY_EXCLUSION_TYPES.has(String(ex.type || "").trim()));
@@ -70,26 +80,12 @@ export function partitionVardiya24Exclusions(exclusions: ExcludedDay[] | null | 
   return { motor, legacy };
 }
 
-export function sumDeductionDayUnits(segment: FmPeriodSegment): number {
-  return segment.deductions.reduce((s, d) => s + d.dayWeight, 0);
+export function sumDeductionDayUnits(win: DeductionWindow): number {
+  return win.totalDeductionDayUnits;
 }
 
-function parseExcludedUnitsFromCaption(caption: string | undefined): number | null {
-  if (!caption) return null;
-  const re = /([\d]+(?:[.,]5)?)\s*gün/gi;
-  let total = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(caption)) !== null) {
-    const n = parseFloat(m[1].replace(",", "."));
-    if (Number.isFinite(n) && n > 0) total += n;
-  }
-  return total > EPS ? total : null;
-}
-
-export function resolveExcludedDaysForDeductionSegment(segment: FmPeriodSegment): number {
-  const fromDeductions = sumDeductionDayUnits(segment);
-  if (fromDeductions > EPS) return fromDeductions;
-  return parseExcludedUnitsFromCaption(segment.caption) ?? 0;
+export function resolveExcludedDaysForDeductionSegment(win: DeductionWindow): number {
+  return win.totalDeductionDayUnits;
 }
 
 /** Geçiş satırı (4→3 gün) — legacy calculate24System; motor UBGT/yıllık izin değil. */
@@ -129,18 +125,75 @@ export function rowBaseWeekDaysFromFm(row: Vardiya24ExpandRow): number {
   return fromLabel;
 }
 
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatDayUnits(n: number): string {
+  if (Math.abs(n - 0.5) < 1e-6) return "0,5";
+  if (Math.abs(n - Math.round(n)) < 1e-6) return String(Math.round(n));
+  return String(n).replace(".", ",");
+}
+
+function formatWindowCaption(deductions: NormalizedDeductionOnDate[]): string {
+  if (deductions.length === 0) return "";
+  const ubgtUnits = deductions.filter((d) => d.kind === "UBGT").reduce((s, d) => s + d.dayWeight, 0);
+  const izinUnits = deductions.filter((d) => d.kind === "YILLIK_IZIN").reduce((s, d) => s + d.dayWeight, 0);
+  const parts: string[] = [];
+  if (ubgtUnits > 0) parts.push(`${formatDayUnits(ubgtUnits)} gün UBGT`);
+  if (izinUnits > 0) parts.push(`${formatDayUnits(izinUnits)} gün yıllık izin`);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return `(${parts[0]} düşülmüştür)`;
+  return `(${parts.join(" + ")} düşülmüştür)`;
+}
+
+/** Düşüm günlerini 7 günlük pencerelere böler; bitişik pencereler birleştirilmez. */
+function buildSevenDayWindows(
+  normalizedDays: NormalizedDeductionOnDate[],
+  periodEnd: Date,
+): DeductionWindow[] {
+  if (normalizedDays.length === 0) return [];
+  const sorted = [...normalizedDays].sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+  const windows: DeductionWindow[] = [];
+  let i = 0;
+  while (i < sorted.length) {
+    const firstDay = parseFmDate(sorted[i].dateISO);
+    if (!firstDay) { i++; continue; }
+    const windowEnd = addDays(firstDay, 6);
+    const group: NormalizedDeductionOnDate[] = [];
+    while (i < sorted.length) {
+      const d = parseFmDate(sorted[i].dateISO);
+      if (!d || d > windowEnd) break;
+      group.push(sorted[i]);
+      i++;
+    }
+    const clippedEnd = windowEnd > periodEnd ? periodEnd : windowEnd;
+    windows.push({
+      startISO: toISODate(firstDay),
+      endISO: toISODate(clippedEnd),
+      deductions: group,
+      totalDeductionDayUnits: group.reduce((s, d) => s + d.dayWeight, 0),
+      caption: formatWindowCaption(group),
+    });
+  }
+  return windows;
+}
+
 /**
  * Düşüm penceresinin denk geldiği haftanın çalışma günü (4 veya 3).
  * calculate24System ile aynı: generateWorkDays24 + groupWeeks24.
  */
 export function resolveBaseWeekDaysForDeductionSegment(
-  segment: FmPeriodSegment,
+  win: DeductionWindow,
   opts: ExpandVardiya24RowsForDeductionsOptions,
   normalRows: Vardiya24ExpandRow[],
 ): number {
   const triggerDate =
-    segment.deductions.find((d) => d.dateISO)?.dateISO?.slice(0, 10) ||
-    segment.startISO.slice(0, 10);
+    win.deductions.find((d) => d.dateISO)?.dateISO?.slice(0, 10) ||
+    win.startISO.slice(0, 10);
 
   const generated = generateWorkDays24({
     startDate: opts.segmentStart,
@@ -249,27 +302,27 @@ function subtractOneWeekFromWeekType(
   return out.filter((r) => (Number(r.weeks) || 0) > 0);
 }
 
-function mapDeductionSegmentToVardiyaRow(
-  segment: FmPeriodSegment,
+function mapWindowToVardiyaRow(
+  win: DeductionWindow,
   template: Vardiya24ExpandRow,
   baseWeekDays: number,
   excludedDays: number,
   rowIdx: number,
-  segIdx: number,
+  winIdx: number,
 ): Vardiya24ExpandRow | null {
   const remainingDays = Math.max(0, baseWeekDays - excludedDays);
   if (remainingDays <= EPS) return null;
 
   const fmHours = vardiya24DeductionWeeklyFmHours(baseWeekDays, excludedDays);
-  const brut = getAsgariUcretByDate(segment.startISO) ?? template.brut ?? 0;
+  const brut = getAsgariUcretByDate(win.startISO) ?? template.brut ?? 0;
 
   return {
     ...template,
-    id: `v24-ded-${rowIdx}-${segIdx}-${segment.startISO}`,
+    id: `v24-ded-${rowIdx}-${winIdx}-${win.startISO}`,
     isManual: false,
-    startISO: segment.startISO,
-    endISO: segment.endISO,
-    rangeLabel: `${segment.startISO} – ${segment.endISO}`,
+    startISO: win.startISO,
+    endISO: win.endISO,
+    rangeLabel: `${win.startISO} – ${win.endISO}`,
     weeks: 1,
     brut,
     katsayi: template.katsayi ?? 1,
@@ -279,7 +332,7 @@ function mapDeductionSegmentToVardiyaRow(
     fm: 0,
     net: 0,
     weekTypeLabel: formatRemainingDayLabel(remainingDays),
-    yillikIzinAciklama: segment.caption || undefined,
+    yillikIzinAciklama: win.caption || undefined,
   };
 }
 
@@ -296,37 +349,43 @@ function expandPeriodGroup(
   const periodEnd = normalRows[0].endISO;
   if (!periodStart || !periodEnd) return groupRows;
 
-  const periodResult = buildDeductionPeriodsForFm({
-    periodStart,
-    periodEnd,
-    exclusions,
+  const periodStartDate = parseFmDate(periodStart);
+  const periodEndDate = parseFmDate(periodEnd);
+  if (!periodStartDate || !periodEndDate || periodEndDate < periodStartDate) {
+    return groupRows;
+  }
+
+  const allNormalized = normalizeDeductionDays(exclusions);
+  const daysInPeriod = allNormalized.filter((d) => {
+    const dd = parseFmDate(d.dateISO);
+    return dd && dd >= periodStartDate && dd <= periodEndDate;
   });
 
-  const deductionSegments = periodResult.segments.filter((s) => s.containsDeduction);
-  if (!deductionSegments.length) return groupRows;
+  if (daysInPeriod.length === 0) return groupRows;
+
+  const windows = buildSevenDayWindows(daysInPeriod, periodEndDate);
+  if (!windows.length) return groupRows;
 
   const template = normalRows[0];
   let workingNormals = normalRows.map((r) => ({ ...r }));
   const deductionRows: Vardiya24ExpandRow[] = [];
 
-  deductionSegments
-    .sort((a, b) => a.startISO.localeCompare(b.startISO))
-    .forEach((segment, segIdx) => {
-      const baseWeekDays = resolveBaseWeekDaysForDeductionSegment(segment, opts, normalRows);
-      const excludedDays = resolveExcludedDaysForDeductionSegment(segment);
+  windows.forEach((win, winIdx) => {
+    const baseWeekDays = resolveBaseWeekDaysForDeductionSegment(win, opts, normalRows);
+    const excludedDays = resolveExcludedDaysForDeductionSegment(win);
 
-      workingNormals = subtractOneWeekFromWeekType(workingNormals, baseWeekDays);
+    workingNormals = subtractOneWeekFromWeekType(workingNormals, baseWeekDays);
 
-      const dedRow = mapDeductionSegmentToVardiyaRow(
-        segment,
-        template,
-        baseWeekDays,
-        excludedDays,
-        rowIdx,
-        segIdx,
-      );
-      if (dedRow) deductionRows.push(dedRow);
-    });
+    const dedRow = mapWindowToVardiyaRow(
+      win,
+      template,
+      baseWeekDays,
+      excludedDays,
+      rowIdx,
+      winIdx,
+    );
+    if (dedRow) deductionRows.push(dedRow);
+  });
 
   return [...workingNormals, ...deductionRows];
 }
