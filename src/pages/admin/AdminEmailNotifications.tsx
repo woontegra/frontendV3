@@ -126,6 +126,7 @@ export default function AdminEmailNotifications() {
   const [trackingEvents, setTrackingEvents] = useState<any[]>([]);
   const [trackingEventsTitle, setTrackingEventsTitle] = useState("");
   const [trackingEventsSource, setTrackingEventsSource] = useState<"baro" | "smmm">("baro");
+  const [resendingTrackingId, setResendingTrackingId] = useState<number | null>(null);
   const [protocolUploadFile, setProtocolUploadFile] = useState<File | null>(null);
   const [protocolUploading, setProtocolUploading] = useState(false);
   const [applySameProtocolToAll, setApplySameProtocolToAll] = useState(false);
@@ -766,6 +767,27 @@ Bu e-posta, Bilirkişi Hesaplama Araçları hakkında bilgilendirme amacıyla g�
     }
   };
 
+  const resendTrackingRow = async (row: BaroTracking) => {
+    if (resendingTrackingId === row.id) return;
+    const ok = window.confirm("Bu mail aynı alıcıya tekrar gönderilecek. Devam edilsin mi?");
+    if (!ok) return;
+
+    try {
+      setResendingTrackingId(row.id);
+      const res = await apiClient(`/api/admin/baro-email-trackings/${row.id}/resend`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Mail tekrar gönderilemedi");
+      success("Mail tekrar gönderildi.");
+      await loadTracking();
+    } catch (e: any) {
+      error(e?.message || "Mail tekrar gönderilemedi");
+    } finally {
+      setResendingTrackingId(null);
+    }
+  };
+
   const deleteSelectedTrackings = async () => {
     try {
       if (selectedTrackingIds.length === 0) {
@@ -1401,6 +1423,14 @@ Bu e-posta, Bilirkişi Hesaplama Araçları hakkında bilgilendirme amacıyla g�
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => resendTrackingRow(r)}
+                          disabled={resendingTrackingId === r.id}
+                        >
+                          {resendingTrackingId === r.id ? "Gönderiliyor..." : "Tekrar Gönder"}
+                        </Button>
                         <Button size="sm" variant="outline" onClick={() => openEvents(r)}>Event Detayı</Button>
                         {r.barAssociation?.id ? (
                           <Button size="sm" variant="outline" onClick={() => window.open(`/admin/bar-associations?search=${encodeURIComponent(r.barAssociation?.name || "")}`, "_self")}>Baro Detayı</Button>
