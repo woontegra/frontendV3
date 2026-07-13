@@ -242,6 +242,23 @@
   color: var(--text);
 }
 
+.notificationItemButton {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notificationItemButton:hover {
+  background: var(--hover);
+}
+
+.notificationItemButton:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
 .notificationItem strong {
   font-weight: 400;
   color: var(--text-strong);

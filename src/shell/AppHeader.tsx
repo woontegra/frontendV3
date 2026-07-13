@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Bell, Moon, Sun, Ticket, Video } from "lucide-react";
 import { apiClient } from "@/api/apiClient";
 import AdminHeaderChatActions from "@/components/admin/AdminHeaderChatActions";
@@ -25,10 +25,26 @@ function readIsAdminHeader(): boolean {
 type NotificationItem = {
   id: number;
   title: string;
+  message?: string;
+  type?: string;
   created_at?: string;
   createdAt?: string;
   read?: boolean;
 };
+
+function isTicketNotification(item: NotificationItem): boolean {
+  if (item.type === "ticket") return true;
+  const title = (item.title || "").toLocaleLowerCase("tr-TR");
+  return (
+    title.includes("destek talebi") ||
+    title.includes("yanıt verildi") ||
+    title.includes("yanit verildi")
+  );
+}
+
+function getTicketNotificationPath(isAdmin: boolean): string {
+  return isAdmin ? "/admin/tickets" : "/profile?tab=tickets";
+}
 
 type Props = {
   sidebarCollapsed: boolean;
@@ -44,6 +60,7 @@ export default function AppHeader({
   onSidebarToggle,
 }: Props) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const isAdmin = readIsAdminHeader();
   const [isDark, setIsDark] = useState(
@@ -100,6 +117,20 @@ export default function AppHeader({
     } catch {
       /* sessiz */
     }
+  }
+
+  function closeNotificationPanel() {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setNotifOpen(false);
+  }
+
+  function handleNotificationClick(item: NotificationItem) {
+    if (!isTicketNotification(item)) return;
+    closeNotificationPanel();
+    navigate(getTicketNotificationPath(isAdmin));
   }
 
   return (
@@ -196,11 +227,31 @@ export default function AppHeader({
                 ) : (
                   notifications.map((item) => {
                     const createdAt = item.createdAt || item.created_at;
-                    return (
-                      <div key={item.id} className={styles.notificationItem}>
+                    const clickable = isTicketNotification(item);
+                    const content = (
+                      <>
                         <strong>{item.title}</strong>
                         {createdAt ? <span>{new Date(createdAt).toLocaleString("tr-TR")}</span> : null}
-                      </div>
+                      </>
+                    );
+
+                    if (!clickable) {
+                      return (
+                        <div key={item.id} className={styles.notificationItem}>
+                          {content}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`${styles.notificationItem} ${styles.notificationItemButton}`}
+                        onClick={() => handleNotificationClick(item)}
+                      >
+                        {content}
+                      </button>
                     );
                   })
                 )}
