@@ -141,6 +141,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = (await response.json()) as Record<string, unknown>;
         const updatedUser = mapApiUser(data, profileFallback, profileUrlFallback);
         syncDemoUserFromMe(data);
+        if (data.licenseStatus === "OK") {
+          localStorage.setItem("licenseValid", "true");
+        } else if (
+          data.licenseStatus === "NOT_ACTIVATED" ||
+          data.licenseStatus === "NO_LICENSE"
+        ) {
+          localStorage.setItem("licenseValid", "false");
+        }
         applyUser(updatedUser);
         return;
       }

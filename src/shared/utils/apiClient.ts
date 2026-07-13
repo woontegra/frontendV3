@@ -162,9 +162,9 @@ export async function apiClient(endpoint: string, options: RequestOptions = {}) 
       console.warn("[API] Device limit exceeded - showing blocking modal");
       // Dispatch event to show device blocking modal
       window.dispatchEvent(new CustomEvent("device-limit-exceeded"));
-    } else if (data.error === "activation_required") {
+    } else if (data.error === "activation_required" || data.licenseStatus === "NOT_ACTIVATED") {
       console.warn("[API] License activation required");
-      // Redirect to activation page
+      localStorage.setItem("licenseValid", "false");
       if (window.location.pathname !== "/professional-license-activation") {
         window.location.href = "/professional-license-activation";
       }

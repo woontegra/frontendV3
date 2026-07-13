@@ -110,6 +110,24 @@ function ProtectedShell() {
     return <Navigate to="/login" replace />;
   }
 
+  const tenantId = Number(localStorage.getItem("tenant_id") || "1");
+  if (tenantId !== 1) {
+    const licenseValid = localStorage.getItem("licenseValid") === "true";
+    let isDemoUser = false;
+    try {
+      const stored = localStorage.getItem("current_user");
+      if (stored) {
+        const parsed = JSON.parse(stored) as { licenseType?: string };
+        isDemoUser = (parsed.licenseType || "").toLowerCase() === "demo";
+      }
+    } catch {
+      /* ignore */
+    }
+    if (!licenseValid && !isDemoUser) {
+      return <Navigate to="/professional-license-activation" replace />;
+    }
+  }
+
   return (
     <>
       <AppShell />
