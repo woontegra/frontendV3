@@ -249,12 +249,16 @@ export function parseRenewalRedirect(payload: unknown): string {
     firstValue(source, ["redirectUrl", "redirectURL", "url"]) ??
       firstValue(checkout, ["redirectUrl", "redirectURL", "url"]),
   );
-  if (!redirectUrl) throw new Error("Satın alma yönlendirme adresi alınamadı.");
+  if (!redirectUrl) throw new Error("Yenileme yönlendirme adresi alınamadı.");
 
   const url = new URL(redirectUrl);
   const allowedHosts = new Set(["bilirkisihesap.com", "www.bilirkisihesap.com"]);
-  if (url.protocol !== "https:" || !allowedHosts.has(url.hostname) || url.pathname !== "/satin-al") {
-    throw new Error("Geçersiz satın alma yönlendirme adresi.");
+  if (
+    url.protocol !== "https:" ||
+    !allowedHosts.has(url.hostname) ||
+    url.pathname !== "/abonelik-yenile"
+  ) {
+    throw new Error("Geçersiz yenileme yönlendirme adresi.");
   }
   if (!url.searchParams.get("renew")) {
     throw new Error("Yenileme anahtarı alınamadı.");
