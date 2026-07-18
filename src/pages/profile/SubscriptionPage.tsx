@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CalendarDays,
@@ -21,6 +21,8 @@ import {
   formatProductType,
   getOptionPricing,
   normalizeRenewalOptions,
+  parseRenewalRedirect,
+  type RenewalOption,
   type RenewalOptions,
 } from "./subscriptionRenewal";
 
@@ -64,7 +66,17 @@ export function buildCustomerRenewalUrl(customerCode: string) {
   return url.toString();
 }
 
-function CustomerNumberActions({ customerCode }: { customerCode?: string }) {
+function CustomerNumberActions({
+  customerCode,
+  onRenew,
+  renewalDisabled = false,
+  renewalLoading = false,
+}: {
+  customerCode?: string;
+  onRenew?: () => void;
+  renewalDisabled?: boolean;
+  renewalLoading?: boolean;
+}) {
   const { success, error } = useToast();
 
   const copyCustomerCode = async () => {
@@ -109,9 +121,13 @@ function CustomerNumberActions({ customerCode }: { customerCode?: string }) {
             <Copy aria-hidden="true" className="mr-2 h-4 w-4" />
             Kopyala
           </Button>
-          <Button type="button" onClick={openRenewalPage} disabled={!customerCode}>
+          <Button
+            type="button"
+            onClick={onRenew ?? openRenewalPage}
+            disabled={!customerCode || renewalDisabled || renewalLoading}
+          >
             <ExternalLink aria-hidden="true" className="mr-2 h-4 w-4" />
-            Aboneliği Uzat
+            {renewalLoading ? "Hazırlanıyor..." : "Aboneliği Uzat"}
           </Button>
         </div>
       </CardContent>
@@ -160,9 +176,6 @@ function LegacySubscriptionPage() {
     };
 
     void loadSubscriptionData();
-    const handleFocus = () => void loadSubscriptionData();
-    window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
   }, [user?.email]);
 
   const legacyFormatDate = (dateStr: string | null | undefined) => {
@@ -319,7 +332,13 @@ function LegacySubscriptionPage() {
   );
 }
 
-function RenewalSubscriptionPage() {
+function RenewalSubscriptionPage({
+  userKey,
+  onSelectionChange,
+}: {
+  userKey: string | null;
+  onSelectionChange: (option: RenewalOption | null) => void;
+}) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [renewal, setRenewal] = useState<RenewalOptions | null>(null);
@@ -332,6 +351,8 @@ function RenewalSubscriptionPage() {
     const loadRenewalOptions = async () => {
       setLoading(true);
       setLoadError(null);
+      setRenewal(null);
+      setSelectedIndex(0);
       try {
         const response = await apiClient("/api/subscription/renewal/options", { method: "GET" });
         if (!response.ok) {
@@ -357,15 +378,15 @@ function RenewalSubscriptionPage() {
     };
 
     void loadRenewalOptions();
-    const handleFocus = () => void loadRenewalOptions();
-    window.addEventListener("focus", handleFocus);
     return () => {
       active = false;
-      window.removeEventListener("focus", handleFocus);
     };
-  }, [reloadKey]);
+  }, [reloadKey, userKey]);
 
   const selectedOption = renewal?.options[selectedIndex] ?? null;
+  useEffect(() => {
+    onSelectionChange(selectedOption);
+  }, [onSelectionChange, selectedOption]);
   const pricing = useMemo(
     () => (renewal ? getOptionPricing(renewal, selectedOption) : null),
     [renewal, selectedOption],
@@ -564,17 +585,62 @@ function RenewalSubscriptionPage() {
 
 export default function SubscriptionPage() {
   const { user, refreshUser } = useAuth();
+  const { error } = useToast();
+  const refreshedUserId = useRef<string | null>(null);
+  const [selectedRenewalOption, setSelectedRenewalOption] = useState<RenewalOption | null>(null);
+  const [renewalStarting, setRenewalStarting] = useState(false);
 
   useEffect(() => {
-    if (user && !user.customerCode) {
-      void refreshUser();
-    }
+    const userId = user?.id == null ? null : String(user.id);
+    if (!userId || user.customerCode || refreshedUserId.current === userId) return;
+    refreshedUserId.current = userId;
+    void refreshUser();
   }, [refreshUser, user?.customerCode, user?.id]);
+
+  const startSelectedRenewal = useCallback(async () => {
+    if (!selectedRenewalOption || renewalStarting) return;
+    setRenewalStarting(true);
+    try {
+      const response = await apiClient("/api/subscription/renewal/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productType: selectedRenewalOption.productType,
+          period: selectedRenewalOption.period,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(await responseError(response, "Yenileme oturumu oluşturulamadı."));
+      }
+      const renewalUrl = parseRenewalRedirect(await response.json());
+      window.open(renewalUrl, "_blank", "noopener,noreferrer");
+    } catch (requestError) {
+      error(
+        requestError instanceof Error
+          ? requestError.message
+          : "Yenileme oturumu oluşturulamadı.",
+      );
+    } finally {
+      setRenewalStarting(false);
+    }
+  }, [error, renewalStarting, selectedRenewalOption]);
 
   return (
     <div className="space-y-6">
-      <CustomerNumberActions customerCode={user?.customerCode} />
-      {renewalEnabled ? <RenewalSubscriptionPage /> : <LegacySubscriptionPage />}
+      <CustomerNumberActions
+        customerCode={user?.customerCode}
+        onRenew={renewalEnabled ? () => void startSelectedRenewal() : undefined}
+        renewalDisabled={renewalEnabled && !selectedRenewalOption}
+        renewalLoading={renewalStarting}
+      />
+      {renewalEnabled ? (
+        <RenewalSubscriptionPage
+          userKey={user?.id == null ? null : String(user.id)}
+          onSelectionChange={setSelectedRenewalOption}
+        />
+      ) : (
+        <LegacySubscriptionPage />
+      )}
     </div>
   );
 }
