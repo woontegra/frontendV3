@@ -80,7 +80,11 @@ function CustomerNumberActions({ customerCode }: { customerCode?: string }) {
 
   const openRenewalPage = () => {
     if (!customerCode) return;
-    window.location.assign(buildCustomerRenewalUrl(customerCode));
+    window.open(
+      buildCustomerRenewalUrl(customerCode),
+      "_blank",
+      "noopener,noreferrer",
+    );
   };
 
   return (
