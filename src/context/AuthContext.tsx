@@ -21,6 +21,7 @@ export type AuthUser = {
   licenseType?: string | null;
   licenseActive?: boolean;
   licenseStatus?: string;
+  customerCode?: string;
 } | null;
 
 type AuthContextType = {
@@ -56,6 +57,7 @@ function mapApiUser(
     licenseType: typeof data.licenseType === "string" ? data.licenseType : null,
     licenseActive: data.licenseActive !== false,
     licenseStatus: typeof data.licenseStatus === "string" ? data.licenseStatus : undefined,
+    customerCode: typeof data.customerCode === "string" ? data.customerCode : undefined,
   };
 }
 
