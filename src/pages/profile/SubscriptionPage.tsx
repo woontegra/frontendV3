@@ -37,6 +37,7 @@ function formatDate(value: string | null) {
     day: "numeric",
     month: "long",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -185,6 +186,7 @@ function LegacySubscriptionPage() {
         year: "numeric",
         month: "long",
         day: "numeric",
+        timeZone: "UTC",
       });
     } catch {
       return String(dateStr);

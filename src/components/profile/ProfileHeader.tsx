@@ -17,6 +17,7 @@ function formatSubscriptionDate(dateStr: string | null | undefined): string {
       year: "numeric",
       month: "long",
       day: "numeric",
+      timeZone: "UTC",
     });
   } catch {
     return "-";
