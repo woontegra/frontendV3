@@ -100,16 +100,34 @@ export function isAdminRole(role: unknown, tenantId?: number | null): boolean {
   return Number(tenantId) === 1;
 }
 
-export function roleDisplayLabel(role: unknown, tenantId?: number | null): string {
+export function roleDisplayLabel(
+  role: unknown,
+  tenantId?: number | null,
+  account?: {
+    licenseType?: string | null;
+    hasValidLicense?: boolean;
+    licenseActive?: boolean;
+    licenseStatus?: string;
+  },
+): string {
   if (isAdminRole(role, tenantId)) {
-    return "Admin";
+    return "Yönetici";
   }
-  const r = normalizeUserRole(role);
-  if (r === "user") {
-    return "Kullanıcı";
+  const licenseType = String(account?.licenseType || "").trim().toLowerCase();
+  if (licenseType === "demo") {
+    return "Demo Kullanıcı";
   }
-  if (r) {
-    return r.charAt(0).toUpperCase() + r.slice(1);
+  const licenseStatus = String(account?.licenseStatus || "").trim().toUpperCase();
+  const hasActivePaidSubscription =
+    account?.hasValidLicense === true
+    || licenseStatus === "OK"
+    || (
+      Boolean(licenseType)
+      && account?.licenseActive !== false
+      && !["EXPIRED", "INACTIVE", "NO_LICENSE"].includes(licenseStatus)
+    );
+  if (hasActivePaidSubscription) {
+    return "Abone";
   }
   return "Kullanıcı";
 }

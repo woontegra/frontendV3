@@ -33,6 +33,7 @@ const ADMIN_CARDS = [
   { to: "/admin/device-management", label: "Cihaz Yönetimi", icon: Smartphone },
   { to: "/admin/email-notifications", label: "Email Bildirimleri", icon: Mail },
   { to: "/admin/bar-associations", label: "Baro Yönetimi", icon: Building2 },
+  { to: "/admin/bar-campaign-performance", label: "Baro Kampanya Performansı", icon: BarChart2 },
   { to: "/admin/feedback", label: "Kullanıcı Geri Bildirimleri", icon: Star },
 ];
 

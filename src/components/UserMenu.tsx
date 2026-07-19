@@ -67,7 +67,12 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
 
   const displayName = user?.name?.trim() || user?.email || "Hesabım";
   const displayEmail = user?.email || "";
-  const roleLabel = roleDisplayLabel(user?.role, user?.tenantId);
+  const roleLabel = roleDisplayLabel(user?.role, user?.tenantId, {
+    licenseType: user?.licenseType,
+    hasValidLicense: user?.hasValidLicense,
+    licenseActive: user?.licenseActive,
+    licenseStatus: user?.licenseStatus,
+  });
   const showAdminBadge = isAdminRole(user?.role, user?.tenantId);
 
   const initials = (user?.name?.trim() || user?.email || "?")
@@ -149,7 +154,7 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
               <span className="text-sm text-gray-700 dark:text-gray-200">{displayName}</span>
               {showAdminBadge ? (
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
-                  Admin
+                  Yönetici
                 </span>
               ) : (
                 <span className="text-[10px] text-gray-500 dark:text-gray-400">{roleLabel}</span>
@@ -220,7 +225,7 @@ export default function UserMenu({ user, logout }: UserMenuProps) {
                 <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{displayEmail}</div>
                 {showAdminBadge ? (
                   <span className="inline-block mt-1 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
-                    Admin
+                    Yönetici
                   </span>
                 ) : (
                   <span className="inline-block mt-1 text-[10px] text-gray-500 dark:text-gray-400">{roleLabel}</span>

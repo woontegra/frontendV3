@@ -47,6 +47,7 @@ import KaydetRouteShell from "@/core/kaydet/KaydetRouteShell";
 import AdminAccessDeniedPage from "@/pages/admin/AdminAccessDeniedPage";
 import AdminAuditLogPage from "@/pages/admin/AdminAuditLogPage";
 import AdminBarAssociationsPage from "@/pages/admin/AdminBarAssociationsPage";
+import AdminBarCampaignPerformancePage from "@/pages/admin/AdminBarCampaignPerformancePage";
 import AdminChatPage from "@/pages/admin/AdminChatPage";
 import AdminControlCenter from "@/pages/admin/AdminControlCenter";
 import AdminCreateUserPage from "@/pages/admin/AdminCreateUserPage";
@@ -280,6 +281,14 @@ export default function App() {
           element={
             <AdminOnly>
               <AdminBarAssociationsPage />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="admin/bar-campaign-performance"
+          element={
+            <AdminOnly>
+              <AdminBarCampaignPerformancePage />
             </AdminOnly>
           }
         />

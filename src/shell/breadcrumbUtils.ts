@@ -23,6 +23,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   "device-management": "Cihaz Yönetimi",
   "email-notifications": "Email Bildirimleri",
   "bar-associations": "Baro Yönetimi",
+  "bar-campaign-performance": "Baro Kampanya Performansı",
   feedback: "Kullanıcı Geri Bildirimleri",
   "davaci-ucreti": "Davacı Ücreti",
   "ucret-alacagi": "Ücret Alacağı",

@@ -68,6 +68,17 @@ export function buildCustomerRenewalUrl(customerCode: string) {
   return url.toString();
 }
 
+export function subscriptionExpiryWarningThreshold(productType: string | null) {
+  const normalized = String(productType || "").trim().toLowerCase();
+  if (["monthly", "professional_monthly", "pro_monthly"].includes(normalized)) {
+    return 7;
+  }
+  if (["annual", "yearly", "professional_yearly", "pro_yearly"].includes(normalized)) {
+    return 30;
+  }
+  return null;
+}
+
 function CustomerNumberActions({
   customerCode,
   onRenew,
@@ -519,10 +530,21 @@ function RenewalSubscriptionPage({
   );
   const selectedCampaign = selectedOption ? selectedOption.campaign : renewal?.campaign ?? null;
 
+  const warningThreshold = subscriptionExpiryWarningThreshold(
+    renewal?.currentPackage ?? null,
+  );
+  const isExpired =
+    renewal?.remainingDays !== null
+    && renewal?.remainingDays !== undefined
+    && renewal.remainingDays <= 0;
   const expiringSoon =
-    renewal?.remainingDays !== null &&
-    renewal?.remainingDays !== undefined &&
-    renewal.remainingDays <= 30;
+    isExpired
+    || (
+      warningThreshold !== null
+      && renewal?.remainingDays !== null
+      && renewal?.remainingDays !== undefined
+      && renewal.remainingDays <= warningThreshold
+    );
 
   return (
     <div className="space-y-6">
