@@ -28,6 +28,7 @@ import {
 
 const renewalEnabled = import.meta.env.VITE_SUBSCRIPTION_RENEWAL_ENABLED === "true";
 const CUSTOMER_RENEWAL_URL = "https://bilirkisihesap.com/abonelik-yenile";
+const PURCHASE_URL = "https://bilirkisihesap.com/satin-al";
 
 function formatDate(value: string | null) {
   if (!value) return "-";
@@ -72,11 +73,15 @@ function CustomerNumberActions({
   onRenew,
   renewalDisabled = false,
   renewalLoading = false,
+  actionRequiresCustomerCode = true,
+  actionLabel = "Aboneliği Uzat",
 }: {
   customerCode?: string;
   onRenew?: () => void;
   renewalDisabled?: boolean;
   renewalLoading?: boolean;
+  actionRequiresCustomerCode?: boolean;
+  actionLabel?: string;
 }) {
   const { success, error } = useToast();
 
@@ -125,10 +130,10 @@ function CustomerNumberActions({
           <Button
             type="button"
             onClick={onRenew ?? openRenewalPage}
-            disabled={!customerCode || renewalDisabled || renewalLoading}
+            disabled={(actionRequiresCustomerCode && !customerCode) || renewalDisabled || renewalLoading}
           >
             <ExternalLink aria-hidden="true" className="mr-2 h-4 w-4" />
-            {renewalLoading ? "Hazırlanıyor..." : "Aboneliği Uzat"}
+            {renewalLoading ? "Hazırlanıyor..." : actionLabel}
           </Button>
         </div>
       </CardContent>
@@ -141,6 +146,125 @@ interface LegacySubscriptionData {
   subscriptionEndsAt: string | null;
   subscriptionStartsAt?: string | null;
   autoRenew: boolean;
+}
+
+interface DemoSubscriptionData {
+  startsAt: string | null;
+  endsAt: string | null;
+  licenseActive: boolean;
+  licenseStatus: string | null;
+}
+
+function DemoSubscriptionPage({ userKey }: { userKey: string | null }) {
+  const [loading, setLoading] = useState(true);
+  const [demo, setDemo] = useState<DemoSubscriptionData | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const loadDemo = async () => {
+      setLoading(true);
+      try {
+        const response = await apiClient("/api/auth/me");
+        if (!response.ok) throw new Error("DEMO_INFO_UNAVAILABLE");
+        const payload = await response.json() as Record<string, unknown>;
+        const demoLicense =
+          payload.demoLicense && typeof payload.demoLicense === "object"
+            ? payload.demoLicense as Record<string, unknown>
+            : null;
+        const stringOrNull = (value: unknown) =>
+          typeof value === "string" && value.trim() ? value : null;
+        if (active) {
+          setDemo({
+            startsAt:
+              stringOrNull(payload.subscriptionStartsAt)
+              ?? stringOrNull(demoLicense?.activatedAt)
+              ?? stringOrNull(demoLicense?.createdAt),
+            endsAt:
+              stringOrNull(payload.subscriptionEndsAt)
+              ?? stringOrNull(demoLicense?.expiresAt),
+            licenseActive: payload.licenseActive !== false,
+            licenseStatus: stringOrNull(payload.licenseStatus),
+          });
+        }
+      } catch {
+        if (active) setDemo(null);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    void loadDemo();
+    return () => {
+      active = false;
+    };
+  }, [userKey]);
+
+  const progress = calculateSubscription(demo?.startsAt, demo?.endsAt);
+  const remainingDays = progress.hasSubscription
+    ? Math.max(0, progress.daysRemaining)
+    : 0;
+  const expired =
+    demo?.licenseStatus === "EXPIRED"
+    || !demo?.licenseActive
+    || (progress.hasSubscription && progress.daysRemaining <= 0);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Abonelik Bilgileri</CardTitle>
+        <CardDescription>7 günlük demo erişiminizin durumu</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div aria-busy="true" className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {[1, 2, 3, 4, 5].map((item) => (
+              <div key={item}>
+                <div className="mb-2 h-4 w-28 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                <div className="h-6 w-36 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+              </div>
+            ))}
+          </div>
+        ) : demo ? (
+          <dl className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <dt className="text-sm text-gray-500 dark:text-gray-400">Durum</dt>
+              <dd className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                7 Günlük Demo
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-gray-500 dark:text-gray-400">Demo Başlangıç Tarihi</dt>
+              <dd className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {formatDate(demo.startsAt)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-gray-500 dark:text-gray-400">Demo Bitiş Tarihi</dt>
+              <dd className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {formatDate(demo.endsAt)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-gray-500 dark:text-gray-400">Kalan Gün</dt>
+              <dd className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {remainingDays} gün
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-gray-500 dark:text-gray-400">Hesap Durumu</dt>
+              <dd className={`mt-1 text-lg font-semibold ${expired ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+                {expired ? "Süresi dolmuş" : "Aktif"}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Demo erişim bilgileri şu anda görüntülenemiyor.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function LegacySubscriptionPage() {
@@ -591,6 +715,7 @@ export default function SubscriptionPage() {
   const refreshedUserId = useRef<string | null>(null);
   const [selectedRenewalOption, setSelectedRenewalOption] = useState<RenewalOption | null>(null);
   const [renewalStarting, setRenewalStarting] = useState(false);
+  const isDemo = user?.licenseType?.toLowerCase() === "demo";
 
   useEffect(() => {
     const userId = user?.id == null ? null : String(user.id);
@@ -631,11 +756,21 @@ export default function SubscriptionPage() {
     <div className="space-y-6">
       <CustomerNumberActions
         customerCode={user?.customerCode}
-        onRenew={renewalEnabled ? () => void startSelectedRenewal() : undefined}
-        renewalDisabled={renewalEnabled && !selectedRenewalOption}
-        renewalLoading={renewalStarting}
+        onRenew={
+          isDemo
+            ? () => window.open(PURCHASE_URL, "_blank", "noopener,noreferrer")
+            : renewalEnabled
+              ? () => void startSelectedRenewal()
+              : undefined
+        }
+        renewalDisabled={!isDemo && renewalEnabled && !selectedRenewalOption}
+        renewalLoading={!isDemo && renewalStarting}
+        actionRequiresCustomerCode={!isDemo}
+        actionLabel={isDemo ? "Abonelik Satın Al" : "Aboneliği Uzat"}
       />
-      {renewalEnabled ? (
+      {isDemo ? (
+        <DemoSubscriptionPage userKey={user?.id == null ? null : String(user.id)} />
+      ) : renewalEnabled ? (
         <RenewalSubscriptionPage
           userKey={user?.id == null ? null : String(user.id)}
           onSelectionChange={setSelectedRenewalOption}
