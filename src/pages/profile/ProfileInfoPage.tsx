@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { apiClient } from "@/utils/apiClient";
+import BillingProfileCard from "./BillingProfileCard";
 
 function parseProfileUser(payload: Record<string, unknown>) {
   const nested = payload.data as Record<string, unknown> | undefined;
@@ -143,7 +144,6 @@ export default function ProfileInfoPage() {
         body: JSON.stringify({
           name: formData.name,
           phone: formData.phone,
-          company: formData.company,
         }),
       });
       if (!response.ok) {
@@ -226,17 +226,6 @@ export default function ProfileInfoPage() {
                   placeholder="+90 555 123 45 67"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="company">Firma Adı</Label>
-                <Input
-                  id="company"
-                  name="company"
-                  type="text"
-                  value={formData.company}
-                  onChange={handleChange}
-                  placeholder="Firma adı"
-                />
-              </div>
             </div>
             <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
               <Button type="submit" disabled={isLoading}>
@@ -246,6 +235,7 @@ export default function ProfileInfoPage() {
           </form>
         </CardContent>
       </Card>
+      <BillingProfileCard />
     </div>
   );
 }
