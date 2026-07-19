@@ -139,6 +139,15 @@ const optionFromRecord = (
   };
 };
 
+const isSupportedRenewalOption = (option: RenewalOption): boolean => {
+  const productType = option.productType.trim().toLowerCase();
+  const period = String(option.period).trim().toLowerCase();
+  return (
+    (productType === "monthly" && ["0", "p1m", "monthly", "1_month"].includes(period))
+    || (productType === "annual" && ["1", "p1y", "annual", "yearly", "1_year"].includes(period))
+  );
+};
+
 const normalizeOptions = (source: UnknownRecord): RenewalOption[] => {
   const rawOptions = firstValue(source, [
     "options",
@@ -184,11 +193,12 @@ const normalizeOptions = (source: UnknownRecord): RenewalOption[] => {
 
   return options.filter(
     (option, index, all) =>
-      all.findIndex(
-        (candidate) =>
-          candidate.productType === option.productType &&
-          String(candidate.period) === String(option.period),
-      ) === index,
+      isSupportedRenewalOption(option)
+      && all.findIndex(
+          (candidate) =>
+            candidate.productType === option.productType &&
+            String(candidate.period) === String(option.period),
+        ) === index,
   );
 };
 
