@@ -16,6 +16,7 @@ interface CreateUserForm {
   password: string;
   role: string;
   tenantId: string;
+  barAssociationId: string;
   subscriptionType: string;
   subscriptionEndsAt: string;
 }
@@ -26,11 +27,17 @@ interface Tenant {
   email: string | null;
 }
 
+interface BarAssociationOption {
+  id: number;
+  name: string;
+}
+
 export default function AdminCreateUserPage() {
   const { success, error } = useToast();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [barAssociations, setBarAssociations] = useState<BarAssociationOption[]>([]);
   const [showNewTenantModal, setShowNewTenantModal] = useState(false);
   const [newTenantName, setNewTenantName] = useState("");
   const [newTenantEmail, setNewTenantEmail] = useState("");
@@ -40,12 +47,18 @@ export default function AdminCreateUserPage() {
   const [tenantSearch, setTenantSearch] = useState("");
 
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<CreateUserForm>({
-    defaultValues: { role: "user", subscriptionType: "professional_annual", tenantId: "" },
+    defaultValues: {
+      role: "user",
+      subscriptionType: "professional_annual",
+      tenantId: "",
+      barAssociationId: "",
+    },
   });
   const selectedTenantId = watch("tenantId");
 
   useEffect(() => {
     fetchTenants();
+    fetchBarAssociations();
   }, []);
 
   useEffect(() => {
@@ -92,6 +105,25 @@ export default function AdminCreateUserPage() {
     } catch {}
   };
 
+  const fetchBarAssociations = async () => {
+    try {
+      const res = await apiClient("/api/admin/bar-associations?status=ACTIVE", {
+        headers: { "x-user-role": "admin" },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setBarAssociations(
+          (Array.isArray(data.items) ? data.items : [])
+            .map((item: { id?: number; name?: string }) => ({
+              id: Number(item.id),
+              name: String(item.name || "").trim(),
+            }))
+            .filter((item: BarAssociationOption) => Number.isFinite(item.id) && item.id > 0 && item.name),
+        );
+      }
+    } catch {}
+  };
+
   const handleCreateTenant = async () => {
     if (!newTenantName.trim()) { error("Şirket adı gereklidir"); return; }
     try {
@@ -125,6 +157,7 @@ export default function AdminCreateUserPage() {
         body: JSON.stringify({
           ...data,
           tenantId: Number(data.tenantId),
+          barAssociationId: data.barAssociationId ? Number(data.barAssociationId) : null,
           subscriptionEndsAt: data.subscriptionEndsAt || null,
         }),
       });
@@ -287,6 +320,21 @@ export default function AdminCreateUserPage() {
                   <option value="user">Kullanıcı</option>
                   <option value="admin">Admin</option>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="barAssociationId">Baro (Opsiyonel)</Label>
+                <Select id="barAssociationId" {...register("barAssociationId")}>
+                  <option value="">Baro yok</option>
+                  {barAssociations.map((bar) => (
+                    <option key={bar.id} value={String(bar.id)}>
+                      {bar.name}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Baro seçilirse müşteri kodu baro prefix&apos;i ile oluşturulur. Kampanya veya ödeme kaydı oluşturulmaz.
+                </p>
               </div>
               </div>
             </section>
