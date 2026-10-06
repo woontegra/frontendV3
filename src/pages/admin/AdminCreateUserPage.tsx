@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/context/ToastContext";
-import { ArrowLeft, Check, ChevronsUpDown, Search } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { apiClient } from "@/utils/apiClient";
 
 interface CreateUserForm {
@@ -15,16 +15,9 @@ interface CreateUserForm {
   email: string;
   password: string;
   role: string;
-  tenantId: string;
   barAssociationId: string;
   subscriptionType: string;
   subscriptionEndsAt: string;
-}
-
-interface Tenant {
-  id: number;
-  name: string;
-  email: string | null;
 }
 
 interface BarAssociationOption {
@@ -36,28 +29,18 @@ export default function AdminCreateUserPage() {
   const { success, error } = useToast();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [barAssociations, setBarAssociations] = useState<BarAssociationOption[]>([]);
-  const [showNewTenantModal, setShowNewTenantModal] = useState(false);
-  const [newTenantName, setNewTenantName] = useState("");
-  const [newTenantEmail, setNewTenantEmail] = useState("");
-  const [isCreatingTenant, setIsCreatingTenant] = useState(false);
   const [subscriptionType, setSubscriptionType] = useState("professional_annual");
-  const [tenantOpen, setTenantOpen] = useState(false);
-  const [tenantSearch, setTenantSearch] = useState("");
 
-  const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<CreateUserForm>({
+  const { register, handleSubmit, formState: { errors }, setValue } = useForm<CreateUserForm>({
     defaultValues: {
       role: "user",
       subscriptionType: "professional_annual",
-      tenantId: "",
       barAssociationId: "",
     },
   });
-  const selectedTenantId = watch("tenantId");
 
   useEffect(() => {
-    fetchTenants();
     fetchBarAssociations();
   }, []);
 
@@ -79,32 +62,6 @@ export default function AdminCreateUserPage() {
     calculateEndDate();
   }, [subscriptionType, setValue]);
 
-  const filteredTenants = useMemo(() => {
-    const q = tenantSearch.trim().toLowerCase();
-    if (!q) return tenants;
-    return tenants.filter((t) => {
-      const name = String(t.name || "").toLowerCase();
-      const email = String(t.email || "").toLowerCase();
-      const tenantText = `tenant ${t.name}`.toLowerCase();
-      return name.includes(q) || email.includes(q) || tenantText.includes(q);
-    });
-  }, [tenants, tenantSearch]);
-
-  const selectedTenant = useMemo(
-    () => tenants.find((t) => String(t.id) === String(selectedTenantId || "")) || null,
-    [tenants, selectedTenantId]
-  );
-
-  const fetchTenants = async () => {
-    try {
-      const res = await apiClient("/api/admin/tenants", { headers: { "x-user-role": "admin" } });
-      if (res.ok) {
-        const data = await res.json();
-        setTenants(Array.isArray(data) ? data : []);
-      }
-    } catch {}
-  };
-
   const fetchBarAssociations = async () => {
     try {
       const res = await apiClient("/api/admin/bar-associations?status=ACTIVE", {
@@ -124,30 +81,6 @@ export default function AdminCreateUserPage() {
     } catch {}
   };
 
-  const handleCreateTenant = async () => {
-    if (!newTenantName.trim()) { error("Şirket adı gereklidir"); return; }
-    try {
-      setIsCreatingTenant(true);
-      const res = await apiClient("/api/admin/tenants", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-user-role": "admin" },
-        body: JSON.stringify({ name: newTenantName, email: newTenantEmail || null }),
-      });
-      if (!res.ok) throw new Error("Şirket oluşturulamadı");
-      const newTenant = await res.json();
-      success(`${newTenant.name} şirketi oluşturuldu`);
-      await fetchTenants();
-      setValue("tenantId", String(newTenant.id));
-      setShowNewTenantModal(false);
-      setNewTenantName("");
-      setNewTenantEmail("");
-    } catch (err) {
-      error(err instanceof Error ? err.message : "Şirket oluşturulamadı");
-    } finally {
-      setIsCreatingTenant(false);
-    }
-  };
-
   const onSubmit = async (data: CreateUserForm) => {
     try {
       setIsLoading(true);
@@ -155,10 +88,13 @@ export default function AdminCreateUserPage() {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-user-role": "admin" },
         body: JSON.stringify({
-          ...data,
-          tenantId: Number(data.tenantId),
-          barAssociationId: data.barAssociationId ? Number(data.barAssociationId) : null,
+          name: data.name,
+          email: data.email,
+          password: data.password,
+          role: data.role,
+          subscriptionType: data.subscriptionType,
           subscriptionEndsAt: data.subscriptionEndsAt || null,
+          barAssociationId: data.barAssociationId ? Number(data.barAssociationId) : null,
         }),
       });
       if (!res.ok) {
@@ -202,83 +138,10 @@ export default function AdminCreateUserPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Şirket Bilgisi</h3>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="tenantId">Şirket / Tenant *</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setShowNewTenantModal(true)} className="text-xs">
-                    ➕ Yeni Şirket Ekle
-                  </Button>
-                </div>
-                <input
-                  type="hidden"
-                  {...register("tenantId", {
-                    required: "Şirket seçimi gereklidir",
-                    validate: (v) => (v && v !== "" ? true : "Lütfen bir şirket seçiniz"),
-                  })}
-                />
-                <div className="relative">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={`w-full justify-between ${errors.tenantId ? "border-red-500" : ""}`}
-                    onClick={() => setTenantOpen((v) => !v)}
-                  >
-                    <span className="truncate text-left">
-                      {selectedTenant
-                        ? `${selectedTenant.name}${selectedTenant.email ? ` — ${selectedTenant.email}` : ""}`
-                        : "Şirket seçiniz"}
-                    </span>
-                    <ChevronsUpDown className="h-4 w-4 opacity-60" />
-                  </Button>
-                  {tenantOpen && (
-                    <div className="absolute z-30 mt-2 w-full rounded-md border bg-white dark:bg-gray-900 shadow-lg">
-                      <div className="p-2 border-b border-gray-200 dark:border-gray-800">
-                        <div className="relative">
-                          <Search className="h-4 w-4 absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-                          <Input
-                            value={tenantSearch}
-                            onChange={(e) => setTenantSearch(e.target.value)}
-                            placeholder="Şirket adı / e-posta ara"
-                            className="pl-8 h-9"
-                          />
-                        </div>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto p-1">
-                        {filteredTenants.length === 0 ? (
-                          <p className="text-xs text-gray-500 px-2 py-2">Sonuç bulunamadı.</p>
-                        ) : (
-                          filteredTenants.map((t) => {
-                            const isSelected = String(selectedTenantId || "") === String(t.id);
-                            return (
-                              <button
-                                key={t.id}
-                                type="button"
-                                onClick={() => {
-                                  setValue("tenantId", String(t.id), { shouldValidate: true });
-                                  setTenantOpen(false);
-                                }}
-                                className="w-full text-left px-2 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-sm"
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <p className="font-medium truncate">{t.name}</p>
-                                    {t.email && <p className="text-xs text-gray-500 truncate">{t.email}</p>}
-                                  </div>
-                                  {isSelected ? <Check className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" /> : null}
-                                </div>
-                              </button>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {errors.tenantId && <p className="text-sm text-red-600 dark:text-red-400">{errors.tenantId.message}</p>}
-              </div>
-            </section>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Her kullanıcı için ayrı bir çalışma alanı oluşturulur. Mevcut bir şirkete bağlama yapılmaz.
+            </p>
+
 
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Kullanıcı Bilgisi</h3>
@@ -382,28 +245,6 @@ export default function AdminCreateUserPage() {
           </form>
         </CardContent>
       </Card>
-
-      {showNewTenantModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowNewTenantModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">Yeni Şirket Ekle</h3>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="newTenantName">Şirket Adı *</Label>
-                <Input id="newTenantName" value={newTenantName} onChange={(e) => setNewTenantName(e.target.value)} placeholder="Örn: ABC Hukuk Bürosu" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="newTenantEmail">Email (Opsiyonel)</Label>
-                <Input id="newTenantEmail" type="email" value={newTenantEmail} onChange={(e) => setNewTenantEmail(e.target.value)} placeholder="info@firma.com" />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <Button type="button" variant="outline" onClick={() => { setShowNewTenantModal(false); setNewTenantName(""); setNewTenantEmail(""); }} disabled={isCreatingTenant}>İptal</Button>
-              <Button type="button" onClick={handleCreateTenant} disabled={isCreatingTenant || !newTenantName.trim()}>{isCreatingTenant ? "Oluşturuluyor..." : "Şirket Oluştur"}</Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

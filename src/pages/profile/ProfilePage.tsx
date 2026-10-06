@@ -5,9 +5,8 @@ import ProfileInfoPage from "./ProfileInfoPage";
 import SavedCalculationsPage from "./SavedCalculationsPage";
 import SubscriptionPage from "./SubscriptionPage";
 import TicketsPage from "./TicketsPage";
-import SubUsersPage from "./SubUsersPage";
 import SettingsPage from "./SettingsPage";
-import { User, Bookmark, CreditCard, MessageSquare, Users, Settings as SettingsIcon } from "lucide-react";
+import { User, Bookmark, CreditCard, MessageSquare, Settings as SettingsIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ALL_MENU_ITEMS = [
@@ -15,7 +14,6 @@ const ALL_MENU_ITEMS = [
   { key: "saved", label: "Kayıtlı Hesaplamalar", icon: Bookmark, tenantFilter: "all" as const },
   { key: "subscription", label: "Abonelik Bilgilerim", icon: CreditCard, tenantFilter: "all" as const },
   { key: "tickets", label: "Destek Talepleri", icon: MessageSquare, tenantFilter: "all" as const },
-  { key: "subusers", label: "Alt Kullanıcılar", icon: Users, tenantFilter: 1 as const },
   { key: "settings", label: "Ayarlar", icon: SettingsIcon, tenantFilter: "all" as const },
 ];
 
@@ -70,8 +68,6 @@ export default function ProfilePage() {
         return <SubscriptionPage />;
       case "tickets":
         return <TicketsPage />;
-      case "subusers":
-        return <SubUsersPage />;
       case "settings":
         return <SettingsPage />;
       default:
